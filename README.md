@@ -2,110 +2,148 @@
 
 > An open-source operating system for indie developers.
 
-Manage projects, servers, domains, deployments, and business assets in one workspace.
+Manage projects, servers, domains, SSL certificates, deployments, and business assets — all from your terminal.
 
-**Open Source · Self-Hosted · Developer First**
-
----
-
-## Why Solo Workspace?
-
-As indie developers, we often have:
-
-* Multiple side projects
-* Several VPS servers
-* Domains from different providers
-* Deployment scripts scattered across machines
-* Notes and business information stored everywhere
-
-After a few months, questions start to appear:
-
-* Which server hosts this project?
-* Which domain belongs to which application?
-* When will a domain or SSL certificate expire?
-* Where is the deployment script?
-* How much does this project cost to run each month?
-
-Solo Workspace is designed to solve these problems by providing a unified workspace for independent developers.
+**Open Source · Plugin Architecture · Developer First**
 
 ---
 
-## Features
+## Directory Structure
 
-### Current
+```
+solo-workspace/
+├── cli/                   # CLI 客户端
+│   └── go/                # Go CLI（插件架构）
+│       ├── cmd/
+│       ├── internal/      # 配置、输出、插件接口
+│       ├── plugins/
+│       ├── main.go
+│       └── go.mod
+├── web/
+├── .solo.yaml             # 配置示例
+├── README.md
+└── LICENSE
+```
 
-* Project Management
-* Server Inventory
-* Domain Tracking
+## Installation
 
-### Planned
+### macOS / Linux
 
-* SSL Expiration Check
-* Deployment Assistant
-* Docker Resource Management
-* GitHub Integration
-* Business Asset Tracking
-* Web Dashboard
+```bash
+cd cli/go && go build -o ~/bin/sw . && cd -
+```
 
----
+### Windows (Git Bash)
+
+```bash
+cd cli/go && go build -o ~/bin/sw.exe . && cd -
+```
+
+### Windows (PowerShell)
+
+```powershell
+cd cli\go
+go build -o "$env:USERPROFILE\bin\sw.exe" .
+```
+
+> **Verify:** `sw ssl check`
+
+## Configuration
+
+### Loading order
+
+`sw` looks for config in this order (first found wins):
+
+| Priority | Path | Notes |
+|----------|------|-------|
+| 1 | `-c <path>` / `--config <path>` | Manual override |
+| 2 | `.solo.yaml` (current directory) | Project-level config |
+| 3 | `~/.solo/config.yaml` | Global user config |
+| 4 | (none) | Returns empty defaults |
+
+### Typical usage
+
+**Per-project config** — place `.solo.yaml` in your project root:
+
+```yaml
+# .solo.yaml
+servers:
+  my-vps:
+    host: 123.123.123.123
+    user: root
+    port: 22
+
+domains:
+  - example.com
+  - mysite.org
+
+projects:
+  my-app:
+    path: /home/me/my-app
+    description: My awesome project
+
+notify:
+  webhook: "https://qyapi.weixin.qq.com/cgi-bin/webhook/..."
+```
+
+**Global config** — place at `~/.solo/config.yaml` for settings shared across all projects.
+
+**Manual override** — point to any config file:
+
+```bash
+sw -c /path/to/custom.yaml ssl check
+```
+
+## Commands
+
+```bash
+sw ssl check                  # Check all domain SSL certificates
+sw server list                # List all configured servers
+sw server ssh <name>          # SSH into a server
+```
+
+## Plugin Architecture
+
+Each plugin is a Lego brick:
+
+```
+cli/go/
+├── cmd/                # CLI entry point (cobra)
+├── internal/           # 配置、输出、插件接口
+│   ├── config.go       # YAML config loader
+│   ├── output.go       # 表格/JSON/Spinner/彩色输出
+│   └── plugin.go       # Plugin interface
+├── plugins/            # Plugin implementations
+│   ├── ssl/            # SSL certificate management
+│   └── server/         # Server management
+└── main.go
+```
+
+To add a new plugin:
+1. Create `cli/go/plugins/<name>/plugin.go`
+2. Implement the cobra command
+3. Register in `cli/go/cmd/root.go`
 
 ## Roadmap
 
-### v0.1
-
-* Project Management
+### v0.1 (Current)
+- [x] Plugin architecture
+- [x] SSL certificate check
+- [x] Server list & SSH
+- [ ] Domain management
+- [ ] Expiry notifications
 
 ### v0.2
-
-* Server Management
-
-### v0.3
-
-* Domain Tracking
-
-### v0.4
-
-* SSL Expiration Check
-
-### v0.5
-
-* Deployment Assistant
+- [ ] Docker container management
+- [ ] GitHub repo integration
+- [ ] Cost tracking per project/server
+- [ ] Zsh completion plugin
 
 ### v1.0
+- [ ] Web Dashboard
+- [ ] Team collaboration
+- [ ] Plugin marketplace
 
-* Web Dashboard
+## License
 
----
-
-## Vision
-
-The long-term goal of Solo Workspace is to become the operating system for indie developers.
-
-A single place to manage:
-
-* Projects
-* Servers
-* Domains
-* Deployments
-* Documents
-* Clients
-* Revenue & Expenses
-* AI-powered productivity tools
-
----
-
-## Project Status
-
-Solo Workspace is currently in active development.
-
-Every feature starts from a real problem encountered during daily development and operations work.
-
-Contributions, ideas, feature requests, and feedback are always welcome.
-
-If you're building side projects, freelancing, or running your own products, I'd love to hear how you manage your workflow.
-
-## Philosophy
-
-Build for myself first.
-Open source from day one.
-Grow through real-world usage.
+MIT

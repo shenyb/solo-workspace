@@ -1,0 +1,21 @@
+servers:
+  my-vps:
+    host: 123.123.123.123
+    user: root
+    port: 22
+domains:
+- github.com
+- baidu.com
+projects:
+  solo-workspace:
+    path: E:/workspace/solo-workspace
+    description: Indie developer's operating system
+  go-learning-journal:
+    path: E:/workspace/go-learning-journal
+    description: Go 语言学习记录
+  tech-articles:
+    path: E:/workspace/tech-articles
+    description: 技术文章与生产事故复盘
+notify:
+  webhook: ''
+  email: ''
