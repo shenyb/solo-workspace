@@ -36,13 +36,13 @@ As an indie developer, you juggle dozens of tools: a terminal for servers, a spr
 | 🎮 TUI | Interactive terminal menu (`sw` with no args) |
 | 📦 Completion | Bash / Zsh / PowerShell tab completion |
 
-![sw all](docs/img/sw-all.png)
+![sw all](cli/docs/img/sw-all.png)
 
-![encrypted secrets and environment variables](docs/img/env-secret.png)
+![encrypted secrets and environment variables](cli/docs/img/env-secret.png)
 
 *TUI interactive menu (`sw` with no args) — functional but CLI commands are the recommended workflow:*
 
-![sw TUI interactive menu](docs/img/tui.png)
+![sw TUI interactive menu](cli/docs/img/tui.png)
 
 ---
 
@@ -94,7 +94,7 @@ Add `~/bin` to your `PATH` if it isn't already.
 sw completion install bash   # or zsh, fish, powershell
 ```
 
-![shell tab completion](docs/img/completion.png)
+![shell tab completion](cli/docs/img/completion.png)
 
 ---
 
@@ -133,7 +133,7 @@ notify:
       - admin@example.com
 ```
 
-> 📖 Full command reference: [docs/command.md](docs/command.md)
+> 📖 Full command reference: [cli/docs/command.md](cli/docs/command.md)
 
 ---
 
@@ -175,7 +175,7 @@ cli/go/
 | v0.4 | 📋 Planned | Docker integration, GitHub integration |
 | v1.0 | 🚀 Future | Web dashboard, plugin marketplace |
 
-> 📖 Full roadmap with backlog: [docs/roadmap.md](docs/roadmap.md)
+> 📖 Full roadmap with backlog: [cli/docs/roadmap.md](cli/docs/roadmap.md)
 
 ---
 

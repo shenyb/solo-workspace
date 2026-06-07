@@ -36,7 +36,7 @@
 | 🎮 交互菜单 | `sw` 无参数进入 TUI 菜单 |
 | 📦 补全 | Bash / Zsh / PowerShell Tab 补全 |
 
-![sw all](docs/img/sw-all.png)
+![sw all](cli/docs/img/sw-all.png)
 
 ---
 
@@ -87,7 +87,7 @@ go build -o "$env:USERPROFILE\bin\sw.exe" .
 sw completion install bash   # 或 zsh, fish, powershell
 ```
 
-![shell 补全演示](docs/img/completion.png)
+![shell 补全演示](cli/docs/img/completion.png)
 
 ---
 
@@ -126,7 +126,7 @@ notify:
       - admin@example.com
 ```
 
-> 📖 完整命令参考：[docs/command.md](docs/command.md)
+> 📖 完整命令参考：[cli/docs/command.md](cli/docs/command.md)
 
 ---
 
@@ -168,7 +168,7 @@ cli/go/
 | v0.4 | 📋 计划中 | Docker 集成、GitHub 集成 |
 | v1.0 | 🚀 远期 | Web 仪表盘、插件市场 |
 
-> 📖 完整路线图与待办池：[docs/roadmap.md](docs/roadmap.md)
+> 📖 完整路线图与待办池：[cli/docs/roadmap.md](cli/docs/roadmap.md)
 
 ---
 
