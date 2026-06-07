@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/shenyb/solo-workspace/cli/go/internal"
+	core "github.com/shenyb/solo-workspace/cli/go/internal"
 	"github.com/spf13/cobra"
 )
 
@@ -70,14 +70,29 @@ func checkCertificates(cfg *core.Config) error {
 	}
 	core.Table(columns, rows)
 
-	soon := false
+	var soonResults []CertInfo
 	for _, r := range results {
 		if r.DaysLeft >= 0 && r.DaysLeft <= 30 {
-			if !soon {
-				fmt.Println("\n⚠️  Certificates expiring within 30 days:")
-				soon = true
-			}
+			soonResults = append(soonResults, r)
+		}
+	}
+
+	if len(soonResults) > 0 {
+		fmt.Println("\n⚠️  Certificates expiring within 30 days:")
+		for _, r := range soonResults {
 			fmt.Printf("  %s — %d days left\n", r.Domain, r.DaysLeft)
+		}
+		if cfg.Notify != nil && cfg.Notify.Email != nil && cfg.Notify.Email.Enabled {
+			subject := "[sw] SSL Certificate Expiry Warning"
+			body := "The following certificates are expiring soon:\n\n"
+			for _, r := range soonResults {
+				body += fmt.Sprintf("- %s: %d days left\n", r.Domain, r.DaysLeft)
+			}
+			if err := core.SendEmail(subject, body); err != nil {
+				fmt.Printf("Warning: failed to send email notification: %v\n", err)
+			} else {
+				fmt.Println("✅ Notification email sent")
+			}
 		}
 	}
 

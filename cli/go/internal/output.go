@@ -13,15 +13,25 @@ import (
 
 // ── Table ────────────────────────────────────────────────
 
-// Table writes a formatted table to stdout using tablewriter.
+// Table writes a formatted, clean table to stdout using tablewriter.
 func Table(header []string, rows [][]string) {
 	t := tablewriter.NewWriter(os.Stdout)
 	t.SetHeader(header)
 	t.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 	t.SetAlignment(tablewriter.ALIGN_LEFT)
+
+	// Light border style: column separators but no outer box
 	t.SetBorder(false)
-	t.SetTablePadding("\t")
-	t.SetNoWhiteSpace(true)
+	t.SetCenterSeparator("│")
+	t.SetColumnSeparator(" │ ")
+	t.SetRowSeparator("─")
+	t.SetHeaderLine(true)
+
+	// Space padding for reliable column alignment (tabs break on varying content widths)
+	t.SetTablePadding(" ")
+	t.SetAutoWrapText(true)
+	t.SetColWidth(50) // cap long columns so they don't explode the layout
+
 	t.AppendBulk(rows)
 	t.Render()
 }
