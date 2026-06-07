@@ -1,72 +1,117 @@
+[中文](README_CN.md)
+
 # Solo Workspace
 
-> An open-source operating system for indie developers.
+> The open-source operating system for indie developers.
 
-Manage projects, servers, domains, SSL certificates, deployments, and business assets — all from your terminal.
+Manage projects, servers, domains, SSL certificates, environment variables, secrets, and more — all from your terminal.
 
 **Open Source · Plugin Architecture · Developer First**
 
 ---
 
-## Directory Structure
+## Why Solo Workspace?
 
+As an indie developer, you juggle dozens of tools: a terminal for servers, a spreadsheet for domains, sticky notes for todos, `.env` files scattered across projects, and manual SSL checks. **Solo Workspace** brings it all into one CLI — a single source of truth for your entire indie dev operation.
+
+- **One config file** for servers, domains, projects, and todos
+- **Encrypted secrets** so API keys don't sit in plaintext
+- **Plugin architecture** — extend with `go` packages, zero framework lock-in
+- **Built for indies** — no SaaS, no cloud dependency, your data stays local
+
+---
+
+## Features
+
+| Category | Capability |
+|----------|-----------|
+| 🖥️ Servers | List, SSH into configured servers |
+| 🌐 Domains | Track domains, check SSL certificates |
+| 📁 Projects | CRUD for local projects with metadata |
+| ✅ Todos | Task management with done/reopen |
+| 🔐 Secrets | AES-256-GCM encrypted storage for API keys & tokens |
+| 🌍 Env Vars | Centralized `.env` management with encryption support |
+| 📧 Notify | SMTP email alerts (domain expiry, custom messages) |
+| ⚙️ Config | YAML/JSON import/export, set/get/delete by path |
+| 🎮 TUI | Interactive terminal menu (`sw` with no args) |
+| 📦 Completion | Bash / Zsh / PowerShell tab completion |
+
+![sw all](docs/img/sw-all.png)
+
+![encrypted secrets and environment variables](docs/img/env-secret.png)
+
+*TUI interactive menu (`sw` with no args) — functional but CLI commands are the recommended workflow:*
+
+![sw TUI interactive menu](docs/img/tui.png)
+
+---
+
+## Quick Example
+
+```bash
+# Add a server, domain, and project
+sw server add my-vps --host 1.2.3.4 --user root --port 22
+sw domain add example.com
+sw project add my-saas --path ~/code/my-saas --desc "My SaaS product"
+
+# Check SSL certs for all domains
+sw ssl check
+
+# Store an API key securely
+sw secret set stripe_key "sk_live_xxx"
+
+# See everything at a glance
+sw all
 ```
-solo-workspace/
-├── cli/                   # CLI 客户端
-│   └── go/                # Go CLI（插件架构）
-│       ├── cmd/
-│       ├── internal/      # 配置、输出、插件接口
-│       ├── plugins/
-│       ├── main.go
-│       └── go.mod
-├── web/
-├── .solo.yaml             # 配置示例
-├── README.md
-└── LICENSE
-```
+
+---
 
 ## Installation
 
 ### macOS / Linux
-
 ```bash
 cd cli/go && go build -o ~/bin/sw . && cd -
 ```
 
 ### Windows (Git Bash)
-
 ```bash
 cd cli/go && go build -o ~/bin/sw.exe . && cd -
 ```
 
 ### Windows (PowerShell)
-
 ```powershell
 cd cli\go
 go build -o "$env:USERPROFILE\bin\sw.exe" .
 ```
 
-> **Verify:** `sw ssl check`
+> **Quick verify:** `sw ssl check`
+
+Add `~/bin` to your `PATH` if it isn't already.
+
+### Shell Completion
+
+```bash
+sw completion install bash   # or zsh, fish, powershell
+```
+
+![shell tab completion](docs/img/completion.png)
+
+---
 
 ## Configuration
 
-### Loading order
+SW loads config in this order (first found wins):
 
-`sw` looks for config in this order (first found wins):
-
-| Priority | Path | Notes |
-|----------|------|-------|
+| Priority | Path | Use Case |
+|----------|------|----------|
 | 1 | `-c <path>` / `--config <path>` | Manual override |
-| 2 | `.solo.yaml` (current directory) | Project-level config |
-| 3 | `~/.solo/config.yaml` | Global user config |
-| 4 | (none) | Returns empty defaults |
+| 2 | `~/.solo/config.yaml` | Global settings (all projects) |
+| 3 | `.solo.yaml` (cwd) | Per-project config |
+| 4 | _(none)_ | Empty defaults |
 
-### Typical usage
-
-**Per-project config** — place `.solo.yaml` in your project root:
+**Minimal `~/.solo/config.yaml`:**
 
 ```yaml
-# .solo.yaml
 servers:
   my-vps:
     host: 123.123.123.123
@@ -75,75 +120,76 @@ servers:
 
 domains:
   - example.com
-  - mysite.org
-
-projects:
-  my-app:
-    path: /home/me/my-app
-    description: My awesome project
 
 notify:
-  webhook: "https://qyapi.weixin.qq.com/cgi-bin/webhook/..."
+  email:
+    enabled: true
+    host: smtp.example.com
+    port: 587
+    username: user@example.com
+    password: app-password
+    from: user@example.com
+    to:
+      - admin@example.com
 ```
 
-**Global config** — place at `~/.solo/config.yaml` for settings shared across all projects.
+> 📖 Full command reference: [docs/command.md](docs/command.md)
 
-**Manual override** — point to any config file:
-
-```bash
-sw -c /path/to/custom.yaml ssl check
-```
-
-## Commands
-
-```bash
-sw ssl check                  # Check all domain SSL certificates
-sw server list                # List all configured servers
-sw server ssh <name>          # SSH into a server
-```
+---
 
 ## Plugin Architecture
 
-Each plugin is a Lego brick:
+Each feature is a self-contained plugin — a Lego brick you can swap or extend:
 
 ```
 cli/go/
-├── cmd/                # CLI entry point (cobra)
-├── internal/           # 配置、输出、插件接口
-│   ├── config.go       # YAML config loader
-│   ├── output.go       # 表格/JSON/Spinner/彩色输出
-│   └── plugin.go       # Plugin interface
-├── plugins/            # Plugin implementations
+├── cmd/                # CLI entry point (cobra + TUI)
+├── internal/           # Config, output, plugin interface
+├── plugins/
 │   ├── ssl/            # SSL certificate management
-│   └── server/         # Server management
+│   ├── server/         # Server management
+│   ├── domain/         # Domain management
+│   ├── project/        # Project CRUD
+│   ├── todo/           # Todo management
+│   ├── notify/         # Email notifications
+│   ├── config/         # Config import/export/set/get
+│   ├── env/            # Environment variables
+│   └── secret/         # AES-256-GCM encrypted secrets
 └── main.go
 ```
 
-To add a new plugin:
+**Add a plugin in 3 steps:**
 1. Create `cli/go/plugins/<name>/plugin.go`
 2. Implement the cobra command
 3. Register in `cli/go/cmd/root.go`
 
+---
+
 ## Roadmap
 
-### v0.1 (Current)
-- [x] Plugin architecture
-- [x] SSL certificate check
-- [x] Server list & SSH
-- [ ] Domain management
-- [ ] Expiry notifications
+| Version | Status | Highlights |
+|---------|--------|------------|
+| v0.1 | ✅ Done | Plugin architecture, SSL check, server SSH, domains, todos, notifications |
+| v0.2 | ✅ Current | Env vars, secrets (AES-256-GCM), config import/export, TUI, completion |
+| v0.3 | 🔨 Planned | Project relationships, cost tracking, SQLite backend |
+| v0.4 | 📋 Planned | Docker integration, GitHub integration |
+| v1.0 | 🚀 Future | Web dashboard, plugin marketplace |
 
-### v0.2
-- [ ] Docker container management
-- [ ] GitHub repo integration
-- [ ] Cost tracking per project/server
-- [ ] Zsh completion plugin
+> 📖 Full roadmap with backlog: [docs/roadmap.md](docs/roadmap.md)
 
-### v1.0
-- [ ] Web Dashboard
-- [ ] Team collaboration
-- [ ] Plugin marketplace
+---
+
+## Contributing
+
+Contributions welcome! The plugin architecture makes it easy to add new features.
+
+1. Fork the repo
+2. Create a plugin under `cli/go/plugins/<name>/`
+3. Register it in `cli/go/cmd/root.go`
+4. Open a PR
+
+---
 
 ## License
 
-MIT
+MIT © Solo Workspace
