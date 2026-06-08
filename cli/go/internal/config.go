@@ -97,12 +97,14 @@ type NotifyConfig struct {
 
 // TodoConfig describes a todo item.
 type TodoConfig struct {
+	ID          int    `yaml:"id,omitempty"`
 	Description string `yaml:"description,omitempty"`
 	Done        bool   `yaml:"done,omitempty"`
 }
 
 // ProjectConfig describes a local project.
 type ProjectConfig struct {
+	ID          int                    `yaml:"id,omitempty"`
 	Path        string                 `yaml:"path"`
 	Description string                 `yaml:"description"`
 	RepoURL     string                 `yaml:"repo_url,omitempty"`
@@ -116,6 +118,9 @@ func (p *ProjectConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
+	if id, ok := raw["id"].(int); ok {
+		p.ID = id
+	}
 	if path, ok := raw["path"].(string); ok {
 		p.Path = path
 	}
@@ -128,7 +133,7 @@ func (p *ProjectConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	p.Extra = make(map[string]interface{})
 	for k, v := range raw {
-		if k != "path" && k != "description" && k != "repo_url" {
+		if k != "id" && k != "path" && k != "description" && k != "repo_url" {
 			p.Extra[k] = v
 		}
 	}
@@ -138,6 +143,7 @@ func (p *ProjectConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // MarshalYAML custom marshaler for ProjectConfig to include extra fields
 func (p *ProjectConfig) MarshalYAML() (interface{}, error) {
 	m := map[string]interface{}{
+		"id":          p.ID,
 		"path":        p.Path,
 		"description": p.Description,
 	}
@@ -195,6 +201,7 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
+	EnsureIDs(cfg)
 	return cfg, nil
 }
 

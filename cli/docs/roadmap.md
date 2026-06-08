@@ -14,11 +14,16 @@
 ## v0.2 ✅ (Current)
 - [x] Environment variable management — .env hub + encryption
 - [x] CLI dynamic metadata — config set/get/delete via JSON path
-- [x] Simplified TUI — interactive menu when `sw` is run without arguments
+- [x] Interactive TUI — `sw tui` for optional menu navigation
+- [x] Default overview — `sw` with no args shows resource summary (same as `sw all`)
 - [x] JSON config import/export — `config import/export`
 - [x] Secret management — AES-256-GCM encrypted storage for API keys / tokens / passwords
 - [x] Config priority adjustment — `~/.solo/config.yaml` takes precedence over `./.solo.yaml`
 - [x] Project CRUD (`project add/update/delete`)
+- [x] Project & todo auto-increment IDs — CRUD by ID for easier management
+- [x] Todo update — `todo update <id>` with `--name` / `--desc`
+- [x] Overview improvements — projects first, then todos; secrets shown in `sw all`
+- [x] Table & TUI formatting — aligned column separators, stable terminal restore
 - [x] PowerShell / Git Bash completion installation
 
 ## v0.3 (Planned)
@@ -75,11 +80,16 @@
 ## v0.2 ✅（当前版本）
 - [x] 环境变量管理 — .env 集中管理 + 加密
 - [x] CLI 动态元数据 — config set/get/delete 按 JSON Path 操作
-- [x] TUI 简化版 — `sw` 无参数进入交互菜单
+- [x] 交互式 TUI — `sw tui` 可选菜单导航
+- [x] 默认概览 — `sw` 无参数展示资源总览（等同 `sw all`）
 - [x] JSON 配置导入导出 — `config import/export`
 - [x] 机密管理 — AES-256-GCM 加密存储 API key / token / password
 - [x] 配置优先级调整 — `~/.solo/config.yaml` 优先于 `./.solo.yaml`
 - [x] 项目增删改查（`project add/update/delete`）
+- [x] 项目 & 待办自增 ID — 按 ID 操作，管理更方便
+- [x] 待办编辑 — `todo update <id>` 支持 `--name` / `--desc`
+- [x] 概览优化 — 项目优先、待办其次；`sw all` 展示机密名称
+- [x] 表格 & TUI 格式 — 列分隔符对齐、终端状态稳定恢复
 - [x] PowerShell / Git Bash 补全安装
 
 ## v0.3（计划中）

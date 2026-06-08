@@ -32,7 +32,8 @@ var rootCmd = &cobra.Command{
 Manage servers, domains, SSL certificates, deployments,
 Docker containers, and more — all from your terminal.
 
-Run without arguments to enter interactive menu mode.`,
+Run without arguments to show an overview of all resources.
+Use "sw tui" to enter the interactive menu.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		core.CurrentConfig, err = core.LoadConfig(cfgFile)
@@ -42,8 +43,12 @@ Run without arguments to enter interactive menu mode.`,
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// No subcommand: launch interactive TUI
-		return launchTUI()
+		cfg := core.CurrentConfig
+		if cfg == nil {
+			cfg = core.DefaultConfig()
+		}
+		printAll(cfg)
+		return nil
 	},
 }
 
@@ -61,6 +66,7 @@ func init() {
 	rootCmd.AddCommand(config.Cmd())
 	rootCmd.AddCommand(env.Cmd())
 	rootCmd.AddCommand(allCmd())
+	rootCmd.AddCommand(tuiCmd())
 	rootCmd.AddCommand(completionCmd())
 }
 
@@ -80,6 +86,48 @@ func allCmd() *cobra.Command {
 }
 
 func printAll(cfg *core.Config) {
+	// Projects
+	if len(cfg.Projects) == 0 {
+		fmt.Println(core.Warn("No projects configured."))
+	} else {
+		title := core.Info("Projects:") + " " + core.Success(fmt.Sprintf("(%d)", len(cfg.Projects)))
+		fmt.Println(title)
+		columns := []string{"ID", "Name", "Path", "Description"}
+		rows := make([][]string, 0, len(cfg.Projects))
+		for _, entry := range core.SortedProjects(cfg) {
+			rows = append(rows, []string{
+				fmt.Sprintf("%d", entry.Config.ID),
+				entry.Name,
+				entry.Config.Path,
+				entry.Config.Description,
+			})
+		}
+		core.Table(columns, rows)
+	}
+
+	// Todos
+	if len(cfg.Todos) == 0 {
+		fmt.Println(core.Warn("No todos."))
+	} else {
+		title := core.Info("Todos:") + " " + core.Success(fmt.Sprintf("(%d)", len(cfg.Todos)))
+		fmt.Println(title)
+		columns := []string{"ID", "Name", "Status", "Description"}
+		rows := make([][]string, 0, len(cfg.Todos))
+		for _, entry := range core.SortedTodos(cfg) {
+			status := core.Success("done")
+			if !entry.Config.Done {
+				status = "pending"
+			}
+			rows = append(rows, []string{
+				fmt.Sprintf("%d", entry.Config.ID),
+				entry.Name,
+				status,
+				entry.Config.Description,
+			})
+		}
+		core.Table(columns, rows)
+	}
+
 	// Servers
 	if len(cfg.Servers) == 0 {
 		fmt.Println(core.Warn("No servers configured."))
@@ -100,26 +148,6 @@ func printAll(cfg *core.Config) {
 				port = srv.Port
 			}
 			rows = append(rows, []string{name, srv.Host, srv.User, fmt.Sprintf("%d", port)})
-		}
-		core.Table(columns, rows)
-	}
-
-	// Projects
-	if len(cfg.Projects) == 0 {
-		fmt.Println(core.Warn("No projects configured."))
-	} else {
-		title := core.Info("Projects:") + " " + core.Success(fmt.Sprintf("(%d)", len(cfg.Projects)))
-		fmt.Println(title)
-		columns := []string{"Name", "Path", "Description"}
-		names := make([]string, 0, len(cfg.Projects))
-		for name := range cfg.Projects {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		rows := make([][]string, 0, len(names))
-		for _, name := range names {
-			project := cfg.Projects[name]
-			rows = append(rows, []string{name, project.Path, project.Description})
 		}
 		core.Table(columns, rows)
 	}
@@ -163,30 +191,6 @@ func printAll(cfg *core.Config) {
 		core.Table(columns, rows)
 	}
 
-	// Todos
-	if len(cfg.Todos) == 0 {
-		fmt.Println(core.Warn("No todos."))
-	} else {
-		title := core.Info("Todos:") + " " + core.Success(fmt.Sprintf("(%d)", len(cfg.Todos)))
-		fmt.Println(title)
-		columns := []string{"Name", "Status", "Description"}
-		names := make([]string, 0, len(cfg.Todos))
-		for name := range cfg.Todos {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		rows := make([][]string, 0, len(names))
-		for _, name := range names {
-			todo := cfg.Todos[name]
-			status := core.Success("✓ done")
-			if !todo.Done {
-				status = "  pending"
-			}
-			rows = append(rows, []string{name, status, todo.Description})
-		}
-		core.Table(columns, rows)
-	}
-
 	// Environment Variables
 	envNames := env.ListEnvVarNames()
 	if len(envNames) == 0 {
@@ -203,8 +207,10 @@ func printAll(cfg *core.Config) {
 	}
 
 	// Secrets
-	secretNames, err := secret.ListSecrets()
-	if err != nil || len(secretNames) == 0 {
+	var secretNames []string
+	if err := secret.InitVault(); err != nil {
+		fmt.Println(core.Warn("No secrets."))
+	} else if secretNames, err = secret.ListSecrets(); err != nil || len(secretNames) == 0 {
 		fmt.Println(core.Warn("No secrets."))
 	} else {
 		title := core.Info("Secrets:") + " " + core.Success(fmt.Sprintf("(%d)", len(secretNames)))
@@ -489,6 +495,16 @@ func removeBlock(path, start, end string) error {
 	endIndex += startIndex + len(end)
 	newText := strings.TrimSuffix(text[:startIndex]+text[endIndex:], "\n")
 	return os.WriteFile(path, []byte(newText), 0o644)
+}
+
+func tuiCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "tui",
+		Short: "Enter interactive terminal menu",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return launchTUI()
+		},
+	}
 }
 
 // ── TUI (interactive menu) ────────────────────────────────

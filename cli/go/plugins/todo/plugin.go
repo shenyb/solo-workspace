@@ -2,7 +2,6 @@ package todo
 
 import (
 	"fmt"
-	"sort"
 
 	core "github.com/shenyb/solo-workspace/cli/go/internal"
 	"github.com/spf13/cobra"
@@ -36,31 +35,61 @@ func Cmd() *cobra.Command {
 	addCmd.Flags().String("desc", "", "Todo description")
 	cmd.AddCommand(addCmd)
 
-	cmd.AddCommand(&cobra.Command{
-		Use:   "delete <name>",
-		Short: "Delete a todo item",
+	updateCmd := &cobra.Command{
+		Use:   "update <id>",
+		Short: "Update a todo item by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return deleteTodo(args[0])
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
+			name, _ := cmd.Flags().GetString("name")
+			desc, _ := cmd.Flags().GetString("desc")
+			return updateTodo(id, name, desc)
+		},
+	}
+	updateCmd.Flags().String("name", "", "New todo name")
+	updateCmd.Flags().String("desc", "", "New todo description")
+	cmd.AddCommand(updateCmd)
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "delete <id>",
+		Short: "Delete a todo item by ID",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
+			return deleteTodo(id)
 		},
 	})
 
 	doneCmd := &cobra.Command{
-		Use:   "done <name>",
-		Short: "Mark a todo item as done",
+		Use:   "done <id>",
+		Short: "Mark a todo item as done by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return setTodoDone(args[0], true)
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
+			return setTodoDone(id, true)
 		},
 	}
 	cmd.AddCommand(doneCmd)
 
 	reopenCmd := &cobra.Command{
-		Use:   "reopen <name>",
-		Short: "Mark a todo item as not done",
+		Use:   "reopen <id>",
+		Short: "Mark a todo item as not done by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return setTodoDone(args[0], false)
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
+			return setTodoDone(id, false)
 		},
 	}
 	cmd.AddCommand(reopenCmd)
@@ -78,21 +107,19 @@ func listTodos() error {
 		return nil
 	}
 
-	names := make([]string, 0, len(cfg.Todos))
-	for name := range cfg.Todos {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	columns := []string{"Name", "Description", "Status"}
-	rows := make([][]string, 0, len(names))
-	for _, name := range names {
-		todo := cfg.Todos[name]
+	columns := []string{"ID", "Name", "Description", "Status"}
+	rows := make([][]string, 0, len(cfg.Todos))
+	for _, entry := range core.SortedTodos(cfg) {
 		status := "pending"
-		if todo.Done {
+		if entry.Config.Done {
 			status = "done"
 		}
-		rows = append(rows, []string{name, todo.Description, status})
+		rows = append(rows, []string{
+			fmt.Sprintf("%d", entry.Config.ID),
+			entry.Name,
+			entry.Config.Description,
+			status,
+		})
 	}
 	core.Table(columns, rows)
 	return nil
@@ -109,48 +136,91 @@ func addTodo(name, desc string) error {
 	if _, exists := cfg.Todos[name]; exists {
 		return fmt.Errorf("todo %q already exists", name)
 	}
-	cfg.Todos[name] = &core.TodoConfig{Description: desc}
+	cfg.Todos[name] = &core.TodoConfig{
+		ID:          core.NextTodoID(cfg),
+		Description: desc,
+	}
 	core.CurrentConfig = cfg
 	if err := core.SaveConfig(); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
-	fmt.Printf("✅ Todo %q added\n", name)
+	fmt.Printf("✅ Todo %q added (id=%d)\n", name, cfg.Todos[name].ID)
 	return nil
 }
 
-func deleteTodo(name string) error {
+func updateTodo(id int, newName, desc string) error {
 	cfg := core.CurrentConfig
 	if cfg == nil || cfg.Todos == nil {
-		return fmt.Errorf("todo %q not found", name)
+		return fmt.Errorf("todo id %d not found", id)
 	}
-	if _, exists := cfg.Todos[name]; !exists {
-		return fmt.Errorf("todo %q not found", name)
+
+	oldName, todo, err := core.TodoByID(cfg, id)
+	if err != nil {
+		return err
 	}
+
+	if newName == "" && desc == "" {
+		return fmt.Errorf("at least one of --name or --desc is required")
+	}
+
+	if newName != "" && newName != oldName {
+		if _, exists := cfg.Todos[newName]; exists {
+			return fmt.Errorf("todo %q already exists", newName)
+		}
+		delete(cfg.Todos, oldName)
+		cfg.Todos[newName] = todo
+		oldName = newName
+	}
+
+	if desc != "" {
+		todo.Description = desc
+	}
+
+	if err := core.SaveConfig(); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+	fmt.Printf("✅ Todo %q (id=%d) updated\n", oldName, id)
+	return nil
+}
+
+func deleteTodo(id int) error {
+	cfg := core.CurrentConfig
+	if cfg == nil || cfg.Todos == nil {
+		return fmt.Errorf("todo id %d not found", id)
+	}
+
+	name, _, err := core.TodoByID(cfg, id)
+	if err != nil {
+		return err
+	}
+
 	delete(cfg.Todos, name)
 	if err := core.SaveConfig(); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
-	fmt.Printf("✅ Todo %q deleted\n", name)
+	fmt.Printf("✅ Todo %q (id=%d) deleted\n", name, id)
 	return nil
 }
 
-func setTodoDone(name string, done bool) error {
+func setTodoDone(id int, done bool) error {
 	cfg := core.CurrentConfig
 	if cfg == nil || cfg.Todos == nil {
-		return fmt.Errorf("todo %q not found", name)
+		return fmt.Errorf("todo id %d not found", id)
 	}
-	todo, exists := cfg.Todos[name]
-	if !exists {
-		return fmt.Errorf("todo %q not found", name)
+
+	name, todo, err := core.TodoByID(cfg, id)
+	if err != nil {
+		return err
 	}
+
 	todo.Done = done
 	if err := core.SaveConfig(); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
 	if done {
-		fmt.Printf("✅ Todo %q marked done\n", name)
+		fmt.Printf("✅ Todo %q (id=%d) marked done\n", name, id)
 	} else {
-		fmt.Printf("✅ Todo %q reopened\n", name)
+		fmt.Printf("✅ Todo %q (id=%d) reopened\n", name, id)
 	}
 	return nil
 }

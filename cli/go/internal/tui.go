@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // ── TUI Types ─────────────────────────────────────────────
@@ -28,25 +31,37 @@ type TUI struct {
 	// True when a command was executed (vs. user quitting)
 	CommandRan bool
 
-	// Windows raw mode state (used by tui_raw_windows.go)
-	origConsoleMode uint32
-	consoleModeSet  bool
+	// Only the root menu manages terminal raw mode; submenus reuse it.
+	managesTerminal bool
 }
 
-// NewTUI creates a new TUI instance
+// NewTUI creates a new root TUI instance
 func NewTUI(title string, items []MenuItem) *TUI {
 	return &TUI{
-		title: title,
-		items: items,
+		title:           title,
+		items:           items,
+		managesTerminal: true,
+	}
+}
+
+func newSubTUI(title string, items []MenuItem) *TUI {
+	return &TUI{
+		title:           title,
+		items:           items,
+		managesTerminal: false,
 	}
 }
 
 // Run displays the TUI and handles input loop
 func (t *TUI) Run() error {
-	if err := t.enterRawMode(); err != nil {
-		return err
+	if t.managesTerminal {
+		if err := enterRawMode(); err != nil {
+			return err
+		}
+		defer func() {
+			restoreTerminal(!t.CommandRan && t.exit)
+		}()
 	}
-	defer t.exitRawMode()
 
 	for !t.done {
 		t.render()
@@ -72,25 +87,74 @@ func Dim(s string) string {
 	return "\033[2m" + s + "\033[0m"
 }
 
+// restoreTerminal exits raw mode and resets terminal display attributes.
+func restoreTerminal(clearMenu bool) {
+	exitRawMode()
+	if clearMenu {
+		tuiWriteRaw("\033[2J\033[H")
+	}
+	tuiWriteRaw("\033[0m\033[?25h")
+}
+
+// tuiWriteRaw writes without adding line endings (for escape sequences).
+func tuiWriteRaw(s string) {
+	_, _ = os.Stdout.WriteString(s)
+}
+
+// tuiLine writes one screen line. Raw mode does not map \n to \r\n, so each
+// line must start with \r to avoid column drift.
+func tuiLine(s string) {
+	_, _ = os.Stdout.WriteString("\r" + s + "\r\n")
+}
+
+func padDisplayRight(s string, width int) string {
+	w := runewidth.StringWidth(s)
+	if w >= width {
+		return runewidth.Truncate(s, width, "")
+	}
+	return s + strings.Repeat(" ", width-w)
+}
+
 // render clears screen and draws the menu
 func (t *TUI) render() {
-	// Clear screen and move cursor to top
-	fmt.Print("\033[2J\033[H")
+	tuiWriteRaw("\r\033[2J\033[H")
 
-	// Title
-	fmt.Printf("\033[1;36m%s\033[0m\n\n", t.title)
+	tuiLine(fmt.Sprintf("\033[1;36m%s\033[0m", t.title))
+	tuiLine("")
 
-	// Items
-	for i, item := range t.items {
-		if i == t.pos {
-			fmt.Printf(" \033[7m > %-40s \033[0m  %s\n", item.Label, Dim(item.Description))
-		} else {
-			fmt.Printf("   %-40s    %s\n", item.Label, Dim(item.Description))
+	labelWidth := runewidth.StringWidth("Label")
+	for _, item := range t.items {
+		w := runewidth.StringWidth(item.Label)
+		if w > labelWidth {
+			labelWidth = w
 		}
 	}
 
-	// Footer
-	fmt.Printf("\n\033[2m↑↓ navigate  Enter select  q quit\033[0m\n")
+	colWidth := labelWidth + 2 // room for "> " marker
+	header := padDisplayRight("Label", colWidth) + " │ Description"
+	tuiLine("\033[2m" + header + "\033[0m")
+	tuiLine(strings.Repeat("─", colWidth) + "─┼" + strings.Repeat("─", 40))
+
+	for i, item := range t.items {
+		marker := "  "
+		if i == t.pos {
+			marker = "> "
+		}
+		labelCol := padDisplayRight(marker+item.Label, colWidth)
+		desc := item.Description
+		if i != t.pos {
+			desc = Dim(desc)
+		}
+
+		line := labelCol + " │ " + desc
+		if i == t.pos {
+			line = "\033[7m" + line + "\033[0m"
+		}
+		tuiLine(line)
+	}
+
+	tuiLine("")
+	tuiLine("\033[2m↑↓ navigate  Enter select  q quit\033[0m")
 }
 
 // readKey reads a single keypress in raw mode
@@ -101,7 +165,6 @@ func (t *TUI) readKey() (string, error) {
 		return "", err
 	}
 
-	// Arrow keys are 3 bytes: \033 [ A/B/C/D
 	if n == 3 && buf[0] == 27 && buf[1] == 91 {
 		switch buf[2] {
 		case 'A':
@@ -115,7 +178,6 @@ func (t *TUI) readKey() (string, error) {
 		}
 	}
 
-	// Single character
 	if n == 1 {
 		return string(buf[0]), nil
 	}
@@ -149,21 +211,19 @@ func (t *TUI) activate() {
 	}
 	item := t.items[t.pos]
 
-	// Handle back item
 	if item.IsBack {
 		t.done = true
 		return
 	}
 
-	// Handle submenu
 	if len(item.Children) > 0 {
-		sub := NewTUI(t.title+" > "+item.Label, item.Children)
+		sub := newSubTUI(t.title+" > "+item.Label, item.Children)
 		if err := sub.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
 		if sub.CommandRan {
-			// Submenu ran a command — exit the parent TUI too
 			t.done = true
+			t.CommandRan = true
 		}
 		if sub.WasExit() {
 			t.done = true
@@ -172,18 +232,16 @@ func (t *TUI) activate() {
 		return
 	}
 
-	// Handle command
 	if len(item.Command) > 0 {
 		t.done = true
+		t.CommandRan = true
 		t.executeCommand(item.Command)
 	}
 }
 
-// executeCommand runs the given command, inheriting stdin/stdout/stderr
+// executeCommand runs the given command with a normal (cooked) terminal.
 func (t *TUI) executeCommand(args []string) {
-	t.CommandRan = true
-
-	t.exitRawMode()
+	restoreTerminal(false)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
@@ -193,6 +251,4 @@ func (t *TUI) executeCommand(args []string) {
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
 	}
-
-	t.enterRawMode()
 }

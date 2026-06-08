@@ -2,7 +2,6 @@ package project
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/shenyb/solo-workspace/cli/go/internal"
 	"github.com/spf13/cobra"
@@ -40,22 +39,30 @@ func Cmd() *cobra.Command {
 	cmd.AddCommand(addCmd)
 
 	cmd.AddCommand(&cobra.Command{
-		Use:   "delete <name>",
-		Short: "Delete a project",
+		Use:   "delete <id>",
+		Short: "Delete a project by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return deleteProject(args[0])
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
+			return deleteProject(id)
 		},
 	})
 
 	updateCmd := &cobra.Command{
-		Use:   "update <name>",
-		Short: "Update a project's path or description",
+		Use:   "update <id>",
+		Short: "Update a project's path or description by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
 			path, _ := cmd.Flags().GetString("path")
 			desc, _ := cmd.Flags().GetString("desc")
-			return updateProject(args[0], path, desc)
+			return updateProject(id, path, desc)
 		},
 	}
 	updateCmd.Flags().String("path", "", "New project path")
@@ -75,18 +82,15 @@ func listProjects() error {
 		return nil
 	}
 
-	columns := []string{"Name", "Path", "Description"}
-	var rows [][]string
-
-	names := make([]string, 0, len(cfg.Projects))
-	for name := range cfg.Projects {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		p := cfg.Projects[name]
-		rows = append(rows, []string{name, p.Path, p.Description})
+	columns := []string{"ID", "Name", "Path", "Description"}
+	rows := make([][]string, 0, len(cfg.Projects))
+	for _, entry := range core.SortedProjects(cfg) {
+		rows = append(rows, []string{
+			fmt.Sprintf("%d", entry.Config.ID),
+			entry.Name,
+			entry.Config.Path,
+			entry.Config.Description,
+		})
 	}
 	core.Table(columns, rows)
 	return nil
@@ -106,6 +110,7 @@ func addProject(name, path, desc string) error {
 	}
 
 	cfg.Projects[name] = &core.ProjectConfig{
+		ID:          core.NextProjectID(cfg),
 		Path:        path,
 		Description: desc,
 	}
@@ -115,18 +120,19 @@ func addProject(name, path, desc string) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	fmt.Printf("✅ Project %q added (%s)\n", name, path)
+	fmt.Printf("✅ Project %q added (id=%d, %s)\n", name, cfg.Projects[name].ID, path)
 	return nil
 }
 
-func deleteProject(name string) error {
+func deleteProject(id int) error {
 	cfg := core.CurrentConfig
 	if cfg == nil || cfg.Projects == nil {
-		return fmt.Errorf("project %q not found", name)
+		return fmt.Errorf("project id %d not found", id)
 	}
 
-	if _, exists := cfg.Projects[name]; !exists {
-		return fmt.Errorf("project %q not found", name)
+	name, _, err := core.ProjectByID(cfg, id)
+	if err != nil {
+		return err
 	}
 
 	delete(cfg.Projects, name)
@@ -135,19 +141,19 @@ func deleteProject(name string) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	fmt.Printf("✅ Project %q deleted\n", name)
+	fmt.Printf("✅ Project %q (id=%d) deleted\n", name, id)
 	return nil
 }
 
-func updateProject(name, path, desc string) error {
+func updateProject(id int, path, desc string) error {
 	cfg := core.CurrentConfig
 	if cfg == nil || cfg.Projects == nil {
-		return fmt.Errorf("project %q not found", name)
+		return fmt.Errorf("project id %d not found", id)
 	}
 
-	p, exists := cfg.Projects[name]
-	if !exists {
-		return fmt.Errorf("project %q not found", name)
+	name, p, err := core.ProjectByID(cfg, id)
+	if err != nil {
+		return err
 	}
 
 	if path == "" && desc == "" {
@@ -165,6 +171,6 @@ func updateProject(name, path, desc string) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 
-	fmt.Printf("✅ Project %q updated\n", name)
+	fmt.Printf("✅ Project %q (id=%d) updated\n", name, id)
 	return nil
 }

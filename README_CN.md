@@ -27,13 +27,14 @@
 |------|------|
 | 🖥️ 服务器 | 列表查看、SSH 连接 |
 | 🌐 域名 | 域名追踪、SSL 证书检查 |
-| 📁 项目 | 本地项目增删改查，带元数据 |
-| ✅ 待办 | 任务管理，完成/重新打开 |
+| 📁 项目 | 本地项目增删改查，自增 ID |
+| ✅ 待办 | 任务管理，支持编辑、完成/重开（按 ID） |
 | 🔐 机密 | AES-256-GCM 加密存储 API key 和 token |
 | 🌍 环境变量 | 集中式 `.env` 管理，支持加密 |
 | 📧 通知 | SMTP 邮件告警（域名到期、自定义消息） |
 | ⚙️ 配置 | YAML/JSON 导入导出，按路径增删改查 |
-| 🎮 交互菜单 | `sw` 无参数进入 TUI 菜单 |
+| 📋 概览 | `sw` 无参数展示全部资源 |
+| 🎮 交互菜单 | 可选 TUI 导航（`sw tui`） |
 | 📦 补全 | Bash / Zsh / PowerShell Tab 补全 |
 
 ![sw all](cli/docs/img/sw-all.png)
@@ -54,8 +55,16 @@ sw ssl check
 # 安全存储 API key
 sw secret set stripe_key "sk_live_xxx"
 
-# 一览全局
-sw all
+# 一览全局（直接运行 sw 也可以）
+sw
+
+# 按 ID 管理待办
+sw todo add fix-bug --desc "修复登录问题"
+sw todo update 1 --desc "修复 OAuth 登录"
+sw todo done 1
+
+# 可选交互菜单
+sw tui
 ```
 ---
 
@@ -163,7 +172,7 @@ cli/go/
 | 版本 | 状态 | 亮点 |
 |------|------|------|
 | v0.1 | ✅ 已完成 | 插件架构、SSL 检查、服务器 SSH、域名、待办、通知 |
-| v0.2 | ✅ 当前 | 环境变量、机密加密、配置导入导出、TUI、Shell 补全 |
+| v0.2 | ✅ 当前 | 环境变量、机密加密、配置导入导出、ID 化项目/待办、概览与 TUI 优化 |
 | v0.3 | 🔨 计划中 | 项目关联、成本追踪、SQLite 后端 |
 | v0.4 | 📋 计划中 | Docker 集成、GitHub 集成 |
 | v1.0 | 🚀 远期 | Web 仪表盘、插件市场 |

@@ -23,14 +23,14 @@ func Table(header []string, rows [][]string) {
 	// Light border style: column separators but no outer box
 	t.SetBorder(false)
 	t.SetCenterSeparator("│")
-	t.SetColumnSeparator(" │ ")
+	t.SetColumnSeparator("│")
 	t.SetRowSeparator("─")
 	t.SetHeaderLine(true)
+	t.SetAutoFormatHeaders(true)
 
-	// Space padding for reliable column alignment (tabs break on varying content widths)
 	t.SetTablePadding(" ")
-	t.SetAutoWrapText(true)
-	t.SetColWidth(50) // cap long columns so they don't explode the layout
+	t.SetAutoWrapText(false)
+	t.SetColWidth(50)
 
 	t.AppendBulk(rows)
 	t.Render()

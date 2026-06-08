@@ -9,8 +9,13 @@ import (
 	"unsafe"
 )
 
-func (t *TUI) enterRawMode() error {
-	if t.consoleModeSet {
+var (
+	savedConsoleMode uint32
+	consoleModeSaved bool
+)
+
+func enterRawMode() error {
+	if consoleModeSaved {
 		return nil
 	}
 
@@ -20,14 +25,12 @@ func (t *TUI) enterRawMode() error {
 
 	handle := syscall.Handle(os.Stdin.Fd())
 
-	ret, _, err := getConsoleMode.Call(uintptr(handle), uintptr(unsafe.Pointer(&t.origConsoleMode)))
+	ret, _, err := getConsoleMode.Call(uintptr(handle), uintptr(unsafe.Pointer(&savedConsoleMode)))
 	if ret == 0 {
 		return fmt.Errorf("GetConsoleMode: %v", err)
 	}
 
-	// Disable ENABLE_LINE_INPUT, ENABLE_ECHO_INPUT, ENABLE_PROCESSED_INPUT
-	// Enable ENABLE_VIRTUAL_TERMINAL_INPUT
-	newMode := t.origConsoleMode & ^uint32(0x0001|0x0002|0x0004)
+	newMode := savedConsoleMode & ^uint32(0x0001|0x0002|0x0004)
 	newMode |= 0x0200
 
 	ret, _, err = setConsoleMode.Call(uintptr(handle), uintptr(newMode))
@@ -35,18 +38,18 @@ func (t *TUI) enterRawMode() error {
 		return fmt.Errorf("SetConsoleMode: %v", err)
 	}
 
-	t.consoleModeSet = true
+	consoleModeSaved = true
 	return nil
 }
 
-func (t *TUI) exitRawMode() {
-	if !t.consoleModeSet {
+func exitRawMode() {
+	if !consoleModeSaved {
 		return
 	}
 
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	setConsoleMode := kernel32.NewProc("SetConsoleMode")
 	handle := syscall.Handle(os.Stdin.Fd())
-	setConsoleMode.Call(uintptr(handle), uintptr(t.origConsoleMode))
-	t.consoleModeSet = false
+	setConsoleMode.Call(uintptr(handle), uintptr(savedConsoleMode))
+	consoleModeSaved = false
 }

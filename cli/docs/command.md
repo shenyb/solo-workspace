@@ -3,17 +3,25 @@
 <details open>
 <summary><strong>English</strong> / <a href="#中文">中文</a></summary>
 
+## Overview
+
+```bash
+sw                           # Show resource overview (same as sw all)
+sw all                       # Show all configured resources
+```
+
+Overview display order: **Projects → Todos → Servers → Domains → Notifications → Env Vars → Secrets**
+
+Projects and todos include an auto-increment **ID** column. Use IDs for update/delete/done/reopen operations.
+
 ## Resource Management
 
 ```bash
-# Show all configured resources (projects, servers, domains)
-sw all
-
-# Project CRUD
+# Project CRUD (update/delete by ID)
 sw project list
 sw project add <name> --path <path> --desc "..."
-sw project update <name> --path <path> --desc "..."
-sw project delete <name>
+sw project update <id> --path <path> --desc "..."
+sw project delete <id>
 
 # Server management
 sw server list
@@ -34,11 +42,13 @@ sw ssl check                 # Check all domain SSL certificates
 ## Todo
 
 ```bash
-sw todo list                 # List all todos
-sw todo add <name> --desc "..."  # Add a todo item
-sw todo delete <name>         # Delete a todo item
-sw todo done <name>           # Mark a todo as done
-sw todo reopen <name>         # Reopen a completed todo
+sw todo list                      # List all todos (with ID)
+sw todo add <name> --desc "..."   # Add a todo item
+sw todo update <id> --name <name>   # Rename a todo (optional)
+sw todo update <id> --desc "..."  # Update description (at least one flag required)
+sw todo delete <id>               # Delete a todo by ID
+sw todo done <id>                 # Mark a todo as done
+sw todo reopen <id>               # Reopen a completed todo
 ```
 
 ## Notification
@@ -102,25 +112,35 @@ After installing, reload your shell or open a new terminal session.
 ## Interactive Mode
 
 ```bash
-sw                           # Launch interactive TUI menu (no arguments)
+sw tui                       # Launch interactive TUI menu
 ```
+
+CLI commands are the recommended workflow. The TUI is optional for quick navigation.
 
 </details>
 
 <details>
 <summary id="中文"><strong>中文</strong> / <a href="#">English</a></summary>
 
+## 概览
+
+```bash
+sw                           # 展示资源概览（等同 sw all）
+sw all                       # 查看所有配置的资源
+```
+
+概览展示顺序：**项目 → 待办 → 服务器 → 域名 → 通知 → 环境变量 → 机密**
+
+项目和待办带有自增 **ID** 列，更新/删除/完成/重开等操作请使用 ID。
+
 ## 资源管理
 
 ```bash
-# 查看所有配置的资源（项目、服务器、域名）
-sw all
-
-# 项目管理
+# 项目管理（update/delete 按 ID 操作）
 sw project list
 sw project add <name> --path <path> --desc "..."
-sw project update <name> --path <path> --desc "..."
-sw project delete <name>
+sw project update <id> --path <path> --desc "..."
+sw project delete <id>
 
 # 服务器管理
 sw server list
@@ -141,11 +161,13 @@ sw ssl check                 # 检查所有域名的 SSL 证书
 ## 待办事项
 
 ```bash
-sw todo list                 # 查看所有待办
-sw todo add <name> --desc "..."  # 添加待办
-sw todo delete <name>         # 删除待办
-sw todo done <name>           # 标记完成
-sw todo reopen <name>         # 重新打开
+sw todo list                      # 查看所有待办（含 ID）
+sw todo add <name> --desc "..."   # 添加待办
+sw todo update <id> --name <name>   # 重命名（可选）
+sw todo update <id> --desc "..."  # 修改描述（至少指定一个参数）
+sw todo delete <id>               # 按 ID 删除
+sw todo done <id>                 # 标记完成
+sw todo reopen <id>               # 重新打开
 ```
 
 ## 通知
@@ -209,7 +231,9 @@ sw completion uninstall powershell     # 卸载 PowerShell 补全
 ## 交互模式
 
 ```bash
-sw                           # 无参数启动交互式 TUI 菜单
+sw tui                       # 启动交互式 TUI 菜单
 ```
+
+推荐以 CLI 命令为主流程，TUI 仅作可选快捷导航。
 
 </details>

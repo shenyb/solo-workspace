@@ -37,25 +37,28 @@ Examples:
 	return cmd
 }
 
-// initSecretVault initializes the global secret vault
-func initSecretVault(cmd *cobra.Command, args []string) error {
+// InitVault initializes the global secret vault for read/write access.
+func InitVault() error {
+	if globalVault != nil {
+		return nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("get home dir: %w", err)
 	}
 
-	var err2 error
-	globalVault, err2 = NewSecretVault(home)
-	if err2 != nil {
-		return err2
+	vault, err := NewSecretVault(home)
+	if err != nil {
+		return err
 	}
-
-	// Use a simple master password (in production, use OS keyring or prompt)
-	// For now, use the username or a fixed password
-	masterPassword := getMasterPassword()
-	globalVault.SetMasterPassword(masterPassword)
-
+	vault.SetMasterPassword(getMasterPassword())
+	globalVault = vault
 	return nil
+}
+
+// initSecretVault initializes the global secret vault
+func initSecretVault(cmd *cobra.Command, args []string) error {
+	return InitVault()
 }
 
 // getMasterPassword returns the master password
