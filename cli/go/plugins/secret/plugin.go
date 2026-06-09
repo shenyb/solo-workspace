@@ -65,15 +65,27 @@ func initSecretVault(cmd *cobra.Command, args []string) error {
 	return InitVault()
 }
 
-// getMasterPassword returns the master password
-// In production, this should use OS keyring or prompt the user
+// getMasterPassword returns the master password for the secret vault.
+// Priority: SOLO_SECRET_PASSWORD env var > machine-derived key.
+// The machine-derived key is unique per device so the default is never
+// the same across different machines, unlike a hardcoded fallback.
 func getMasterPassword() string {
-	// For MVP, use a simple derived password from environment or default
-	if pwd := os.Getenv("SOLO_SECRET_PASSWORD"); pwd != "" {
-		return pwd
-	}
-	// Default to a reasonable password (user should set env var for production)
-	return "solo-workspace-default-v1"
+ if pwd := os.Getenv("SOLO_SECRET_PASSWORD"); pwd != "" {
+  return pwd
+ }
+ hostname, _ := os.Hostname()
+ username := os.Getenv("USER")
+ if username == "" {
+  username = os.Getenv("USERNAME")
+ }
+ if hostname == "" {
+  hostname = "unknown"
+ }
+ if username == "" {
+  username = "unknown"
+ }
+ fmt.Fprintf(os.Stderr, "%s No SOLO_SECRET_PASSWORD set, using machine-derived key\n", core.Warn("!"))
+ return fmt.Sprintf("sw-%s-%s", hostname, username)
 }
 
 // setCmd stores a secret

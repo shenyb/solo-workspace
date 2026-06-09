@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -128,15 +129,21 @@ func importCmd() *cobra.Command {
 				return fmt.Errorf("read file: %w", err)
 			}
 
-			// Detect format by file extension or try both
+			// Detect format by file extension
 			var imported *core.Config
 			var parseErr error
 
-			// Try JSON first
-			parseErr = json.Unmarshal(data, &imported)
-			if parseErr != nil {
-				// Try YAML
+			switch ext := strings.ToLower(filepath.Ext(filePath)); ext {
+			case ".json":
+				parseErr = json.Unmarshal(data, &imported)
+			case ".yaml", ".yml":
 				parseErr = yaml.Unmarshal(data, &imported)
+			default:
+				// Try JSON first, then YAML — useful for stdin / no-extension files
+				parseErr = json.Unmarshal(data, &imported)
+				if parseErr != nil {
+					parseErr = yaml.Unmarshal(data, &imported)
+				}
 			}
 
 			if parseErr != nil {
@@ -153,6 +160,9 @@ func importCmd() *cobra.Command {
 			} else {
 				mergeConfigs(core.CurrentConfig, imported)
 			}
+
+			// Re-assign IDs to avoid duplicates from imported data
+			core.EnsureIDs(core.CurrentConfig)
 
 			// Save the merged configuration
 			if err := core.SaveConfig(); err != nil {

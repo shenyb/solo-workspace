@@ -159,7 +159,7 @@ func (t *TUI) render() {
 
 // readKey reads a single keypress in raw mode
 func (t *TUI) readKey() (string, error) {
-	buf := make([]byte, 3)
+	buf := make([]byte, 6)
 	n, err := os.Stdin.Read(buf)
 	if err != nil {
 		return "", err

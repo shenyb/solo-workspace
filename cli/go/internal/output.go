@@ -3,7 +3,6 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"regexp"
 	"strings"
@@ -180,7 +179,9 @@ func Table(header []string, rows [][]string) {
 func PrintJSON(v any) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(v)
+	if err := enc.Encode(v); err != nil {
+		fmt.Fprintf(os.Stderr, "json encode error: %v\n", err)
+	}
 }
 
 // ── Spinner ──────────────────────────────────────────────
@@ -213,7 +214,3 @@ func TodoStatus(done bool) string {
 	return Warn("pending")
 }
 
-// FprintColorized writes colorized output to w (e.g. os.Stdout).
-func FprintColorized(w io.Writer, c color.Color, args ...any) {
-	c.Fprint(w, args...)
-}
