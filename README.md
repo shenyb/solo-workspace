@@ -25,7 +25,7 @@ As an indie developer, you juggle dozens of tools: a terminal for servers, a spr
 
 | Category | Capability |
 |----------|-----------|
-| 🖥️ Servers | List, SSH into configured servers |
+| 🖥️ Servers | List, add, update, delete, SSH into configured servers |
 | 🌐 Domains | Track domains, check SSL certificates |
 | 📁 Projects | CRUD with auto-increment IDs |
 | ✅ Todos | Task management with edit, done/reopen (by ID) |
@@ -117,6 +117,8 @@ SW loads config in this order (first found wins):
 | 2 | `~/.solo/config.yaml` | Global settings (all projects) |
 | 3 | `.solo.yaml` (cwd) | Per-project config |
 | 4 | _(none)_ | Empty defaults |
+
+Data files (`env.yaml`, `secrets.enc`) live alongside the active config file — when using the default `~/.solo/config.yaml` they stay in `~/.solo/`; when using `-c /path/to/config.yaml` they follow to `/path/to/`.
 
 **Minimal `~/.solo/config.yaml`:**
 

@@ -53,6 +53,9 @@ Use "sw tui" to enter the interactive menu.`,
 }
 
 func init() {
+	// Run root PersistentPreRun (config load) before plugin-level hooks (env, secret).
+	cobra.EnableTraverseRunHooks = true
+
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file path")
 
 	// Register plugins — each is a Lego brick
@@ -111,18 +114,16 @@ func printAll(cfg *core.Config) {
 	} else {
 		title := core.Info("Todos:") + " " + core.Success(fmt.Sprintf("(%d)", len(cfg.Todos)))
 		fmt.Println(title)
-		columns := []string{"ID", "Name", "Status", "Description"}
+		columns := []string{"ID", "Name", "Status", "Description", "Created", "Updated"}
 		rows := make([][]string, 0, len(cfg.Todos))
 		for _, entry := range core.SortedTodos(cfg) {
-			status := core.Success("done")
-			if !entry.Config.Done {
-				status = "pending"
-			}
 			rows = append(rows, []string{
 				fmt.Sprintf("%d", entry.Config.ID),
 				entry.Name,
-				status,
+				core.TodoStatus(entry.Config.Done),
 				entry.Config.Description,
+				core.FormatTodoTime(entry.Config.CreatedAt),
+				core.FormatTodoTime(entry.Config.UpdatedAt),
 			})
 		}
 		core.Table(columns, rows)
@@ -535,6 +536,10 @@ func launchTUI() error {
 			Description: "Server management",
 			Children: []core.MenuItem{
 				{Label: "list", Description: "List configured servers", Command: []string{self, "server", "list"}},
+				{Label: "add", Description: "Add a server", Command: []string{self, "server", "add"}},
+				{Label: "update", Description: "Update a server", Command: []string{self, "server", "update"}},
+				{Label: "delete", Description: "Delete a server", Command: []string{self, "server", "delete"}},
+				{Label: "ssh", Description: "SSH into a server", Command: []string{self, "server", "ssh"}},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},

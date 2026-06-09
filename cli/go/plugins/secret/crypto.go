@@ -22,14 +22,13 @@ type SecretVault struct {
 	secrets   map[string]string
 }
 
-// NewSecretVault creates a new secret vault
-func NewSecretVault(homeDir string) (*SecretVault, error) {
-	vaultDir := filepath.Join(homeDir, ".solo")
-	if err := os.MkdirAll(vaultDir, 0o700); err != nil {
+// NewSecretVault creates a new secret vault in the given data directory.
+func NewSecretVault(dataDir string) (*SecretVault, error) {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create vault dir: %w", err)
 	}
 
-	secretsPath := filepath.Join(vaultDir, "secrets.enc")
+	secretsPath := filepath.Join(dataDir, "secrets.enc")
 	sv := &SecretVault{
 		path:    secretsPath,
 		secrets: make(map[string]string),

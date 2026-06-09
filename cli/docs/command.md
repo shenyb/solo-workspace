@@ -25,6 +25,9 @@ sw project delete <id>
 
 # Server management
 sw server list
+sw server add <name> --host <ip> --user <user>  # Add a server
+sw server update <name> --host <ip>              # Update server fields
+sw server delete <name>                          # Delete a server
 sw server ssh <name>
 
 # Domain management
@@ -42,7 +45,7 @@ sw ssl check                 # Check all domain SSL certificates
 ## Todo
 
 ```bash
-sw todo list                      # List all todos (with ID)
+sw todo list                      # List all todos (with ID, Created, Updated)
 sw todo add <name> --desc "..."   # Add a todo item
 sw todo update <id> --name <name>   # Rename a todo (optional)
 sw todo update <id> --desc "..."  # Update description (at least one flag required)
@@ -83,6 +86,8 @@ sw env export > .env                       # Export as .env format
 sw env export --prefix secret_             # Export only secret-prefixed vars
 sw env delete DB_HOST                      # Remove variable
 ```
+
+Data files (`env.yaml`, `secrets.enc`) live alongside the active config file — use `-c <path>` to control their location.
 
 ## Secrets
 
@@ -144,6 +149,9 @@ sw project delete <id>
 
 # 服务器管理
 sw server list
+sw server add <name> --host <ip> --user <user>  # 添加服务器
+sw server update <name> --host <ip>              # 更新服务器信息
+sw server delete <name>                          # 删除服务器
 sw server ssh <name>
 
 # 域名管理
@@ -161,7 +169,7 @@ sw ssl check                 # 检查所有域名的 SSL 证书
 ## 待办事项
 
 ```bash
-sw todo list                      # 查看所有待办（含 ID）
+sw todo list                      # 查看所有待办（含 ID、创建/更新时间）
 sw todo add <name> --desc "..."   # 添加待办
 sw todo update <id> --name <name>   # 重命名（可选）
 sw todo update <id> --desc "..."  # 修改描述（至少指定一个参数）
@@ -202,6 +210,7 @@ sw env export > .env                       # 导出为 .env 格式
 sw env export --prefix secret_             # 仅导出 secret_ 前缀的变量
 sw env delete DB_HOST                      # 删除变量
 ```
+数据文件（`env.yaml`、`secrets.enc`）与当前使用的配置文件同级目录存放——使用 `-c <path>` 控制其位置。
 
 ## 机密管理
 

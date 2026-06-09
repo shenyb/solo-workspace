@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"time"
 )
 
 // EnsureIDs assigns auto-increment IDs to projects and todos that lack one.
@@ -134,7 +135,7 @@ type TodoEntry struct {
 	Config *TodoConfig
 }
 
-// SortedTodos returns todos sorted by ID.
+// SortedTodos returns todos sorted by status (pending first), then updated_at descending.
 func SortedTodos(cfg *Config) []TodoEntry {
 	if cfg == nil || len(cfg.Todos) == 0 {
 		return nil
@@ -144,7 +145,34 @@ func SortedTodos(cfg *Config) []TodoEntry {
 		entries = append(entries, TodoEntry{Name: name, Config: t})
 	}
 	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Config.ID < entries[j].Config.ID
+		ai, aj := entries[i].Config, entries[j].Config
+		if ai.Done != aj.Done {
+			return !ai.Done
+		}
+		return ai.UpdatedAt.After(aj.UpdatedAt)
 	})
 	return entries
+}
+
+// NewTodoTimestamps returns created_at and updated_at for a new todo.
+func NewTodoTimestamps() (time.Time, time.Time) {
+	now := time.Now()
+	return now, now
+}
+
+// TouchTodoUpdated sets updated_at to now, backfilling created_at if missing.
+func TouchTodoUpdated(t *TodoConfig) {
+	now := time.Now()
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+}
+
+// FormatTodoTime formats a todo timestamp for display.
+func FormatTodoTime(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	return t.Local().Format("2006-01-02 15:04")
 }

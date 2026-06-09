@@ -13,28 +13,44 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// envDB manages environment variables persistently
-// Stored in ~/.solo/env.yaml: name -> value pairs
-// Sensitive vars (marked with secret_*) are encrypted via secret plugin
+// envDB manages environment variables persistently.
+// Stored in <data-dir>/env.yaml; data dir is derived from the active config file.
+// Sensitive vars (marked with secret_*) are encrypted via secret plugin.
 type envDB struct {
 	vars map[string]string // name -> value
 	path string
 }
 
-var db *envDB
+var (
+	db         *envDB
+	envDataDir string
+)
 
-func init() {
-	home, err := os.UserHomeDir()
+func ensureDB() error {
+	dataDir, err := core.DataDir()
 	if err != nil {
-		return
+		return err
 	}
-	soloDir := filepath.Join(home, ".solo")
-	os.MkdirAll(soloDir, 0700)
+	if db != nil && envDataDir == dataDir {
+		return nil
+	}
+
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		return fmt.Errorf("create env dir: %w", err)
+	}
 	db = &envDB{
 		vars: make(map[string]string),
-		path: filepath.Join(soloDir, "env.yaml"),
+		path: filepath.Join(dataDir, "env.yaml"),
 	}
-	db.load()
+	envDataDir = dataDir
+	return db.load()
+}
+
+func initEnv(cmd *cobra.Command, args []string) error {
+	if err := ensureDB(); err != nil {
+		return err
+	}
+	return secret.InitVault()
 }
 
 // Cmd returns the env management command
@@ -45,7 +61,7 @@ func Cmd() *cobra.Command {
 		Long: `Save and manage environment variables locally.
 
 Variables prefixed with 'secret_' are encrypted using the secret plugin.
-Other variables are saved in plaintext in ~/.solo/env.yaml
+Other variables are saved in plaintext in the same directory as the active config file.
 
 Examples:
   sw env set DB_HOST localhost              # Save plaintext var
@@ -57,6 +73,7 @@ Examples:
   sw env delete DB_HOST                     # Remove variable
   sw env unset-secret DB_PASSWORD          # Remove from secret vault
 `,
+		PersistentPreRunE: initEnv,
 	}
 
 	cmd.AddCommand(setCmd())
@@ -287,7 +304,7 @@ func unsetSecretCmd() *cobra.Command {
 
 // ListEnvVarNames returns all plaintext env var names (for use by other plugins).
 func ListEnvVarNames() []string {
-	if db == nil {
+	if err := ensureDB(); err != nil {
 		return nil
 	}
 	names := make([]string, 0, len(db.vars))
@@ -298,7 +315,7 @@ func ListEnvVarNames() []string {
 	return names
 }
 
-// load reads environment variables from ~/.solo/env.yaml
+// load reads environment variables from env.yaml in the data directory.
 func (e *envDB) load() error {
 	data, err := os.ReadFile(e.path)
 	if err != nil {
@@ -330,7 +347,7 @@ func (e *envDB) load() error {
 	return scanner.Err()
 }
 
-// save writes environment variables to ~/.solo/env.yaml
+// save writes environment variables to env.yaml in the data directory.
 func (e *envDB) save() error {
 	var lines []string
 	lines = append(lines, "# Environment variables managed by solo-workspace")

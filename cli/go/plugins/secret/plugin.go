@@ -8,7 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var globalVault *SecretVault
+var (
+	globalVault  *SecretVault
+	vaultDataDir string
+)
 
 // Cmd returns the secret management command
 func Cmd() *cobra.Command {
@@ -39,20 +42,21 @@ Examples:
 
 // InitVault initializes the global secret vault for read/write access.
 func InitVault() error {
-	if globalVault != nil {
+	dataDir, err := core.DataDir()
+	if err != nil {
+		return err
+	}
+	if globalVault != nil && vaultDataDir == dataDir {
 		return nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home dir: %w", err)
-	}
 
-	vault, err := NewSecretVault(home)
+	vault, err := NewSecretVault(dataDir)
 	if err != nil {
 		return err
 	}
 	vault.SetMasterPassword(getMasterPassword())
 	globalVault = vault
+	vaultDataDir = dataDir
 	return nil
 }
 

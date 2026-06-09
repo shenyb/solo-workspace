@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -97,9 +99,11 @@ type NotifyConfig struct {
 
 // TodoConfig describes a todo item.
 type TodoConfig struct {
-	ID          int    `yaml:"id,omitempty"`
-	Description string `yaml:"description,omitempty"`
-	Done        bool   `yaml:"done,omitempty"`
+	ID          int       `yaml:"id,omitempty"`
+	Description string    `yaml:"description,omitempty"`
+	Done        bool      `yaml:"done,omitempty"`
+	CreatedAt   time.Time `yaml:"created_at,omitempty"`
+	UpdatedAt   time.Time `yaml:"updated_at,omitempty"`
 }
 
 // ProjectConfig describes a local project.
@@ -155,6 +159,25 @@ func (p *ProjectConfig) MarshalYAML() (interface{}, error) {
 		m[k] = v
 	}
 	return m, nil
+}
+
+// DataDir returns the directory for env.yaml, secrets.enc, etc.
+// Files live alongside the active config file (same directory).
+func DataDir() (string, error) {
+	path := ConfigPath
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot find home dir: %w", err)
+		}
+		return filepath.Join(home, ".solo"), nil
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve config path: %w", err)
+	}
+	return filepath.Dir(absPath), nil
 }
 
 // DefaultConfig returns sensible defaults.

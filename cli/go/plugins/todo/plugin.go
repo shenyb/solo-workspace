@@ -107,18 +107,16 @@ func listTodos() error {
 		return nil
 	}
 
-	columns := []string{"ID", "Name", "Description", "Status"}
+	columns := []string{"ID", "Name", "Description", "Status", "Created", "Updated"}
 	rows := make([][]string, 0, len(cfg.Todos))
 	for _, entry := range core.SortedTodos(cfg) {
-		status := "pending"
-		if entry.Config.Done {
-			status = "done"
-		}
 		rows = append(rows, []string{
 			fmt.Sprintf("%d", entry.Config.ID),
 			entry.Name,
 			entry.Config.Description,
-			status,
+			core.TodoStatus(entry.Config.Done),
+			core.FormatTodoTime(entry.Config.CreatedAt),
+			core.FormatTodoTime(entry.Config.UpdatedAt),
 		})
 	}
 	core.Table(columns, rows)
@@ -136,9 +134,12 @@ func addTodo(name, desc string) error {
 	if _, exists := cfg.Todos[name]; exists {
 		return fmt.Errorf("todo %q already exists", name)
 	}
+	created, updated := core.NewTodoTimestamps()
 	cfg.Todos[name] = &core.TodoConfig{
 		ID:          core.NextTodoID(cfg),
 		Description: desc,
+		CreatedAt:   created,
+		UpdatedAt:   updated,
 	}
 	core.CurrentConfig = cfg
 	if err := core.SaveConfig(); err != nil {
@@ -175,6 +176,8 @@ func updateTodo(id int, newName, desc string) error {
 	if desc != "" {
 		todo.Description = desc
 	}
+
+	core.TouchTodoUpdated(todo)
 
 	if err := core.SaveConfig(); err != nil {
 		return fmt.Errorf("save config: %w", err)
@@ -214,6 +217,7 @@ func setTodoDone(id int, done bool) error {
 	}
 
 	todo.Done = done
+	core.TouchTodoUpdated(todo)
 	if err := core.SaveConfig(); err != nil {
 		return fmt.Errorf("save config: %w", err)
 	}
