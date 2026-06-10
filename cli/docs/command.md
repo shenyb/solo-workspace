@@ -52,7 +52,11 @@ sw todo update <id> --desc "..."  # Update description (at least one flag requir
 sw todo delete <id>               # Delete a todo by ID
 sw todo done <id>                 # Mark a todo as done
 sw todo reopen <id>               # Reopen a completed todo
+sw todo archive run               # Archive todos inactive for 2+ weeks
+sw todo archive list              # List archived todos
 ```
+
+Stale todos are moved to `todos-archive.yaml` in the same directory as the active config file.
 
 ## Notification
 
@@ -176,7 +180,11 @@ sw todo update <id> --desc "..."  # 修改描述（至少指定一个参数）
 sw todo delete <id>               # 按 ID 删除
 sw todo done <id>                 # 标记完成
 sw todo reopen <id>               # 重新打开
+sw todo archive run               # 归档超过 2 周未更新的待办
+sw todo archive list              # 查看已归档待办
 ```
+
+过期待办会移动到与当前配置文件同目录下的 `todos-archive.yaml`。
 
 ## 通知
 

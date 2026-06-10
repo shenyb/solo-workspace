@@ -28,7 +28,7 @@
 | 🖥️ 服务器 | 列表查看、增删改、SSH 连接 |
 | 🌐 域名 | 域名追踪、SSL 证书检查 |
 | 📁 项目 | 本地项目增删改查，自增 ID |
-| ✅ 待办 | 任务管理，支持编辑、完成/重开（按 ID） |
+| ✅ 待办 | 任务管理，支持编辑、完成/重开（按 ID）；超过 2 周未更新可手动归档 |
 | 🔐 机密 | AES-256-GCM 加密存储 API key 和 token |
 | 🌍 环境变量 | 集中式 `.env` 管理，支持加密 |
 | 📧 通知 | SMTP 邮件告警（域名到期、自定义消息） |
@@ -62,6 +62,8 @@ sw
 sw todo add fix-bug --desc "修复登录问题"
 sw todo update 1 --desc "修复 OAuth 登录"
 sw todo done 1
+sw todo archive run              # 归档超过 2 周未更新的待办
+sw todo archive list             # 查看已归档待办（todos-archive.yaml）
 
 # 可选交互菜单
 sw tui

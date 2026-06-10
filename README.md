@@ -28,7 +28,7 @@ As an indie developer, you juggle dozens of tools: a terminal for servers, a spr
 | 🖥️ Servers | List, add, update, delete, SSH into configured servers |
 | 🌐 Domains | Track domains, check SSL certificates |
 | 📁 Projects | CRUD with auto-increment IDs |
-| ✅ Todos | Task management with edit, done/reopen (by ID) |
+| ✅ Todos | Task management with edit, done/reopen (by ID); manual archive after 2 weeks of inactivity |
 | 🔐 Secrets | AES-256-GCM encrypted storage for API keys & tokens |
 | 🌍 Env Vars | Centralized `.env` management with encryption support |
 | 📧 Notify | SMTP email alerts (domain expiry, custom messages) |
@@ -68,6 +68,8 @@ sw
 sw todo add fix-bug --desc "Fix login issue"
 sw todo update 1 --desc "Fix OAuth login"
 sw todo done 1
+sw todo archive run              # Archive todos inactive for 2+ weeks
+sw todo archive list             # View archived todos (todos-archive.yaml)
 
 # Optional interactive menu
 sw tui

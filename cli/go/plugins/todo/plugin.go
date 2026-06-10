@@ -94,6 +94,27 @@ func Cmd() *cobra.Command {
 	}
 	cmd.AddCommand(reopenCmd)
 
+	archiveCmd := &cobra.Command{
+		Use:   "archive",
+		Short: "Archive stale todos and list archived items",
+		Long:  `Archive todos inactive for more than 2 weeks to todos-archive.yaml in the config directory.`,
+	}
+	archiveCmd.AddCommand(&cobra.Command{
+		Use:   "run",
+		Short: "Manually archive todos older than 2 weeks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runArchive()
+		},
+	})
+	archiveCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List archived todos",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return listArchivedTodos()
+		},
+	})
+	cmd.AddCommand(archiveCmd)
+
 	return cmd
 }
 
@@ -202,6 +223,61 @@ func deleteTodo(id int) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 	fmt.Printf("✅ Todo %q (id=%d) deleted\n", name, id)
+	return nil
+}
+
+func runArchive() error {
+	cfg := core.CurrentConfig
+	if cfg == nil {
+		cfg = core.DefaultConfig()
+	}
+	archived, err := core.ArchiveStaleTodos(cfg)
+	if err != nil {
+		return err
+	}
+	if len(archived) == 0 {
+		fmt.Println("No stale todos to archive.")
+		return nil
+	}
+	core.CurrentConfig = cfg
+	if err := core.SaveConfig(); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+	path, err := core.TodoArchivePath()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("✅ Archived %d todo(s) to %s\n", len(archived), path)
+	for _, name := range archived {
+		fmt.Printf("  - %s\n", name)
+	}
+	return nil
+}
+
+func listArchivedTodos() error {
+	archive, err := core.LoadTodoArchive()
+	if err != nil {
+		return err
+	}
+	if len(archive.Todos) == 0 {
+		fmt.Println("No archived todos.")
+		return nil
+	}
+
+	columns := []string{"ID", "Name", "Description", "Status", "Created", "Updated", "Archived"}
+	rows := make([][]string, 0, len(archive.Todos))
+	for _, entry := range core.SortedArchivedTodos(archive) {
+		rows = append(rows, []string{
+			fmt.Sprintf("%d", entry.Config.ID),
+			entry.Name,
+			entry.Config.Description,
+			core.TodoStatus(entry.Config.Done),
+			core.FormatTodoTime(entry.Config.CreatedAt),
+			core.FormatTodoTime(entry.Config.UpdatedAt),
+			core.FormatTodoTime(entry.Config.ArchivedAt),
+		})
+	}
+	core.Table(columns, rows)
 	return nil
 }
 
