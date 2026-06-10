@@ -1,0 +1,12 @@
+[project]
+name = "reviewbot"
+version = "0.1.0"
+description = "AI-powered GitHub code review bot — DeepSeek edition"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0",
+    "requests>=2.31",
+]
+
+[project.scripts]
+reviewbot = "main:main"
