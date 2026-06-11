@@ -164,6 +164,11 @@ func Table(header []string, rows [][]string) {
 				cell = truncateVisible(cell, colWidths[i])
 			}
 			out.WriteString(padRight(cell, colWidths[i]))
+			// Reset ANSI color after every cell to prevent color leakage from
+			// truncated colored cells (e.g. TodoStatus "pending"/"done").
+			if ansiRE.MatchString(cell) {
+				out.WriteString("\x1b[0m")
+			}
 		}
 		out.WriteByte('\n')
 		// blank line between rows for readability
