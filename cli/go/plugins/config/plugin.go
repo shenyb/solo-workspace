@@ -99,7 +99,7 @@ func exportCmd() *cobra.Command {
 
 			// Write to file if specified, otherwise stdout
 			if len(args) > 0 {
-				if err := os.WriteFile(args[0], data, 0600); err != nil {
+				if err := core.WriteFileAtomic(args[0], data, 0600); err != nil {
 					return fmt.Errorf("write file: %w", err)
 				}
 				fmt.Printf("%s Configuration exported to %s\n", core.Success("✓"), args[0])
@@ -113,6 +113,30 @@ func exportCmd() *cobra.Command {
 
 	cmd.Flags().StringP("format", "f", "yaml", "Output format: yaml|json")
 	return cmd
+}
+
+// parseImportConfig unmarshals import file data using the appropriate parser for ext.
+func parseImportConfig(data []byte, ext string) (*core.Config, error) {
+	var imported *core.Config
+	var parseErr error
+	switch strings.ToLower(ext) {
+	case ".json":
+		parseErr = json.Unmarshal(data, &imported)
+	case ".yaml", ".yml", "":
+		parseErr = yaml.Unmarshal(data, &imported)
+	default:
+		parseErr = json.Unmarshal(data, &imported)
+		if parseErr != nil {
+			parseErr = yaml.Unmarshal(data, &imported)
+		}
+	}
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	if imported == nil {
+		return nil, fmt.Errorf("imported config is empty")
+	}
+	return imported, nil
 }
 
 // importCmd imports configuration from a file
@@ -129,29 +153,9 @@ func importCmd() *cobra.Command {
 				return fmt.Errorf("read file: %w", err)
 			}
 
-			// Detect format by file extension
-			var imported *core.Config
-			var parseErr error
-
-			switch ext := strings.ToLower(filepath.Ext(filePath)); ext {
-			case ".json":
-				parseErr = json.Unmarshal(data, &imported)
-			case ".yaml", ".yml":
-				parseErr = yaml.Unmarshal(data, &imported)
-			default:
-				// Try JSON first, then YAML — useful for stdin / no-extension files
-				parseErr = json.Unmarshal(data, &imported)
-				if parseErr != nil {
-					parseErr = yaml.Unmarshal(data, &imported)
-				}
-			}
-
+			imported, parseErr := parseImportConfig(data, filepath.Ext(filePath))
 			if parseErr != nil {
 				return fmt.Errorf("parse config: %w", parseErr)
-			}
-
-			if imported == nil {
-				return fmt.Errorf("imported config is empty")
 			}
 
 			// Merge with existing config
@@ -255,12 +259,20 @@ Examples:
 			if err := mapToConfig(raw, cfg); err != nil {
 				return fmt.Errorf("apply changes: %w", err)
 			}
+			if err := verifyConfigPathPersisted(cfg, path, value); err != nil {
+				return err
+			}
+			if path == "notify.email.enabled" && strings.EqualFold(value, "true") {
+				if err := validateEnabledEmail(cfg); err != nil {
+					return err
+				}
+			}
 			core.CurrentConfig = cfg
 			if err := core.SaveConfig(); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
 
-			fmt.Printf("%s Config %s updated\\n", core.Success("✓"), core.Info(path))
+			fmt.Printf("%s Config %s updated\n", core.Success("✓"), core.Info(path))
 			return nil
 		},
 	}
@@ -327,7 +339,7 @@ func delCmd() *cobra.Command {
 				return fmt.Errorf("save config: %w", err)
 			}
 
-			fmt.Printf("%s Config %s deleted\\n", core.Success("✓"), path)
+			fmt.Printf("%s Config %s deleted\n", core.Success("✓"), path)
 			return nil
 		},
 	}
@@ -335,26 +347,26 @@ func delCmd() *cobra.Command {
 
 // ── Path traversal helpers ──────────────────────────────
 
-// configToMap marshals a Config to a generic map[string]any via JSON round-trip
+// configToMap marshals a Config to a generic map via YAML round-trip.
 func configToMap(cfg *core.Config) (map[string]any, error) {
-	data, err := json.Marshal(cfg)
+	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return nil, err
 	}
 	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
 	return raw, nil
 }
 
-// mapToConfig unmarshals a generic map back into a Config via JSON round-trip
+// mapToConfig unmarshals a generic map back into a Config via YAML round-trip.
 func mapToConfig(raw map[string]any, cfg *core.Config) error {
-	data, err := json.Marshal(raw)
+	data, err := yaml.Marshal(raw)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(data, cfg)
+	return yaml.Unmarshal(data, cfg)
 }
 
 // getByPath retrieves a value at a dot-separated path
@@ -449,8 +461,9 @@ func delByPath(data map[string]any, path string) error {
 		return fmt.Errorf("empty path")
 	}
 
-	// Walk to parent
+	var assignParent []func(any)
 	cur := any(data)
+
 	for i := 0; i < len(segments)-1; i++ {
 		seg := segments[i]
 		switch v := cur.(type) {
@@ -459,6 +472,9 @@ func delByPath(data map[string]any, path string) error {
 			if !ok {
 				return fmt.Errorf("key %q not found", seg)
 			}
+			key := seg
+			m := v
+			assignParent = append(assignParent, func(val any) { m[key] = val })
 			cur = next
 		case []any:
 			idx, err := strconv.Atoi(seg)
@@ -468,13 +484,15 @@ func delByPath(data map[string]any, path string) error {
 			if idx < 0 || idx >= len(v) {
 				return fmt.Errorf("index %d out of range", idx)
 			}
-			cur = v[idx]
+			s := v
+			at := idx
+			assignParent = append(assignParent, func(val any) { s[at] = val })
+			cur = s[at]
 		default:
 			return fmt.Errorf("cannot descend into %T", cur)
 		}
 	}
 
-	// Delete from parent
 	lastSeg := segments[len(segments)-1]
 	switch v := cur.(type) {
 	case map[string]any:
@@ -491,8 +509,11 @@ func delByPath(data map[string]any, path string) error {
 		if idx < 0 || idx >= len(v) {
 			return fmt.Errorf("index %d out of range", idx)
 		}
-		// Remove element from slice
-		v = append(v[:idx], v[idx+1:]...)
+		newSlice := append(v[:idx], v[idx+1:]...)
+		if len(assignParent) == 0 {
+			return fmt.Errorf("cannot delete array element at root")
+		}
+		assignParent[len(assignParent)-1](newSlice)
 		return nil
 	default:
 		return fmt.Errorf("cannot delete from %T", cur)
@@ -519,6 +540,59 @@ func parseValue(s string) any {
 	return s
 }
 
+// verifyConfigPathPersisted ensures setByPath values survive the YAML round-trip into Config.
+func verifyConfigPathPersisted(cfg *core.Config, path, value string) error {
+	raw, err := configToMap(cfg)
+	if err != nil {
+		return fmt.Errorf("verify config: %w", err)
+	}
+	got, err := getByPath(raw, path)
+	if err != nil {
+		return fmt.Errorf("config path %q is not recognized: %w", path, err)
+	}
+	if !configValuesEqual(parseValue(value), got) {
+		return fmt.Errorf("config path %q is not recognized; value was not saved", path)
+	}
+	return nil
+}
+
+func configValuesEqual(want any, got string) bool {
+	switch v := want.(type) {
+	case bool:
+		return got == fmt.Sprintf("%v", v)
+	case int:
+		return got == fmt.Sprintf("%d", v)
+	case float64:
+		return got == fmt.Sprintf("%g", v)
+	default:
+		return got == fmt.Sprintf("%v", v)
+	}
+}
+
+func validateEnabledEmail(cfg *core.Config) error {
+	if cfg == nil || cfg.Notify == nil || cfg.Notify.Email == nil {
+		return fmt.Errorf("notify.email.enabled requires email configuration; set notify.email.host, from, and to first")
+	}
+	email := cfg.Notify.Email
+	var missing []string
+	if email.Host == "" {
+		missing = append(missing, "host")
+	}
+	if email.From == "" {
+		missing = append(missing, "from")
+	}
+	if len(email.To) == 0 {
+		missing = append(missing, "to")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf(
+			"notify.email.enabled is true but missing required field(s): %s (use sw config set notify.email.<field> ...)",
+			strings.Join(missing, ", "),
+		)
+	}
+	return nil
+}
+
 func showYAML(cfg *core.Config) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
@@ -539,10 +613,16 @@ func showJSON(cfg *core.Config) error {
 
 // mergeConfigs merges src into dst (src overwrites existing keys)
 func mergeConfigs(dst, src *core.Config) {
-	// Merge servers
 	if src.Servers != nil {
+		if dst.Servers == nil {
+			dst.Servers = make(map[string]*core.ServerConfig)
+		}
 		for k, v := range src.Servers {
-			dst.Servers[k] = v
+			if existing, ok := dst.Servers[k]; ok && existing != nil && v != nil {
+				mergeServerConfig(existing, v)
+			} else {
+				dst.Servers[k] = v
+			}
 		}
 	}
 
@@ -559,21 +639,32 @@ func mergeConfigs(dst, src *core.Config) {
 		}
 	}
 
-	// Merge projects
 	if src.Projects != nil {
+		if dst.Projects == nil {
+			dst.Projects = make(map[string]*core.ProjectConfig)
+		}
 		for k, v := range src.Projects {
-			dst.Projects[k] = v
+			if existing, ok := dst.Projects[k]; ok && existing != nil && v != nil {
+				mergeProjectConfig(existing, v)
+			} else {
+				dst.Projects[k] = v
+			}
 		}
 	}
 
-	// Merge todos
 	if src.Todos != nil {
+		if dst.Todos == nil {
+			dst.Todos = make(map[string]*core.TodoConfig)
+		}
 		for k, v := range src.Todos {
-			dst.Todos[k] = v
+			if existing, ok := dst.Todos[k]; ok && existing != nil && v != nil {
+				mergeTodoConfig(existing, v)
+			} else {
+				dst.Todos[k] = v
+			}
 		}
 	}
 
-	// Merge notify config
 	if src.Notify != nil {
 		if dst.Notify == nil {
 			dst.Notify = src.Notify
@@ -582,8 +673,116 @@ func mergeConfigs(dst, src *core.Config) {
 				dst.Notify.Webhook = src.Notify.Webhook
 			}
 			if src.Notify.Email != nil {
-				dst.Notify.Email = src.Notify.Email
+				if dst.Notify.Email == nil {
+					dst.Notify.Email = src.Notify.Email
+				} else {
+					mergeEmailConfig(dst.Notify.Email, src.Notify.Email)
+				}
 			}
 		}
 	}
+}
+
+func mergeServerConfig(dst, src *core.ServerConfig) {
+	if src.Host != "" {
+		dst.Host = src.Host
+	}
+	if src.User != "" {
+		dst.User = src.User
+	}
+	if src.Port != 0 {
+		dst.Port = src.Port
+	}
+	if src.Extra != nil {
+		if dst.Extra == nil {
+			dst.Extra = make(map[string]interface{})
+		}
+		for k, v := range src.Extra {
+			dst.Extra[k] = v
+		}
+	}
+}
+
+func mergeProjectConfig(dst, src *core.ProjectConfig) {
+	if src.ID != 0 {
+		dst.ID = src.ID
+	}
+	if src.Path != "" {
+		dst.Path = src.Path
+	}
+	if src.Description != "" {
+		dst.Description = src.Description
+	}
+	if src.RepoURL != "" {
+		dst.RepoURL = src.RepoURL
+	}
+	if src.Extra != nil {
+		if dst.Extra == nil {
+			dst.Extra = make(map[string]interface{})
+		}
+		for k, v := range src.Extra {
+			dst.Extra[k] = v
+		}
+	}
+}
+
+func mergeTodoConfig(dst, src *core.TodoConfig) {
+	if src.ID != 0 {
+		dst.ID = src.ID
+	}
+	if src.Description != "" {
+		dst.Description = src.Description
+	}
+	if src.Note != "" {
+		dst.Note = src.Note
+	}
+	dst.Done = src.Done || dst.Done
+	if !src.CreatedAt.IsZero() {
+		dst.CreatedAt = src.CreatedAt
+	}
+	if !src.UpdatedAt.IsZero() {
+		dst.UpdatedAt = src.UpdatedAt
+	}
+}
+
+func mergeEmailConfig(dst, src *core.EmailConfig) {
+	if src.Host != "" {
+		dst.Host = src.Host
+	}
+	if src.Port != 0 {
+		dst.Port = src.Port
+	}
+	if src.Username != "" {
+		dst.Username = src.Username
+	}
+	if src.Password != "" {
+		dst.Password = src.Password
+	}
+	if src.PasswordSecret != "" {
+		dst.PasswordSecret = src.PasswordSecret
+	}
+	if src.From != "" {
+		dst.From = src.From
+	}
+	if len(src.To) > 0 {
+		seen := make(map[string]struct{}, len(dst.To)+len(src.To))
+		merged := make([]string, 0, len(dst.To)+len(src.To))
+		for _, addr := range dst.To {
+			if _, ok := seen[addr]; ok {
+				continue
+			}
+			seen[addr] = struct{}{}
+			merged = append(merged, addr)
+		}
+		for _, addr := range src.To {
+			if _, ok := seen[addr]; ok {
+				continue
+			}
+			seen[addr] = struct{}{}
+			merged = append(merged, addr)
+		}
+		dst.To = merged
+	}
+	dst.Enabled = src.Enabled || dst.Enabled
+	dst.UseTLS = src.UseTLS || dst.UseTLS
 }

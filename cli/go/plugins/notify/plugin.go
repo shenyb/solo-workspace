@@ -12,7 +12,7 @@ func Cmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "notify",
 		Short: "Email notification management",
-		Long:  `Send email notifications based on configured SMTP settings.`,
+		Long:  `Send notifications via configured webhook and/or email (SMTP).`,
 	}
 
 	sendCmd := &cobra.Command{
@@ -40,9 +40,9 @@ func Cmd() *cobra.Command {
 }
 
 func send(subject, body string) error {
-	if err := core.SendEmail(subject, body); err != nil {
+	if err := core.NotifyAlert(subject, body); err != nil {
 		return fmt.Errorf("send notification: %w", err)
 	}
-	fmt.Println("✅ Email notification sent")
+	fmt.Println("✅ Notification sent")
 	return nil
 }

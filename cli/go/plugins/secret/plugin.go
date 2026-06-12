@@ -2,11 +2,22 @@ package secret
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	core "github.com/shenyb/solo-workspace/cli/go/internal"
 	"github.com/spf13/cobra"
 )
+
+func init() {
+	core.SecretResolver = func(name string) (string, error) {
+		if err := InitVault(); err != nil {
+			return "", err
+		}
+		return GetSecret(name)
+	}
+}
 
 var (
 	globalVault  *SecretVault
@@ -66,7 +77,9 @@ func InitVault() error {
 	if err != nil {
 		return err
 	}
-	vault.SetMasterPassword(getMasterPassword())
+	if err := vault.SetMasterPassword(getMasterPassword()); err != nil {
+		return err
+	}
 	globalVault = vault
 	vaultDataDir = dataDir
 	return nil
@@ -82,33 +95,54 @@ func initSecretVault(cmd *cobra.Command, args []string) error {
 // The machine-derived key is unique per device so the default is never
 // the same across different machines, unlike a hardcoded fallback.
 func getMasterPassword() string {
- if pwd := os.Getenv("SOLO_SECRET_PASSWORD"); pwd != "" {
-  return pwd
- }
- hostname, _ := os.Hostname()
- username := os.Getenv("USER")
- if username == "" {
-  username = os.Getenv("USERNAME")
- }
- if hostname == "" {
-  hostname = "unknown"
- }
- if username == "" {
-  username = "unknown"
- }
- fmt.Fprintf(os.Stderr, "%s No SOLO_SECRET_PASSWORD set, using machine-derived key\n", core.Warn("!"))
- return fmt.Sprintf("sw-%s-%s", hostname, username)
+	if pwd := os.Getenv("SOLO_SECRET_PASSWORD"); pwd != "" {
+		return pwd
+	}
+	hostname, _ := os.Hostname()
+	username := os.Getenv("USER")
+	if username == "" {
+		username = os.Getenv("USERNAME")
+	}
+	if hostname == "" {
+		hostname = "unknown"
+	}
+	if username == "" {
+		username = "unknown"
+	}
+	fmt.Fprintf(os.Stderr, "%s No SOLO_SECRET_PASSWORD set, using machine-derived key\n", core.Warn("!"))
+	return fmt.Sprintf("sw-%s-%s", hostname, username)
 }
 
 // setCmd stores a secret
 func setCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "set <name> <value>",
 		Short: "Save an encrypted secret",
-		Args:  cobra.ExactArgs(2),
+		Long: `Save an encrypted secret. Use "-" as value to read from stdin (avoids argv exposure).
+
+Examples:
+  sw secret set api_key "sk_test_123"
+  echo "sk_test_123" | sw secret set api_key -
+  SOLO_SECRET_VALUE=sk_test sw secret set api_key '$SOLO_SECRET_VALUE'
+`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			value := args[1]
+
+			if v := os.Getenv("SOLO_SECRET_VALUE"); v != "" && value == "$SOLO_SECRET_VALUE" {
+				value = v
+			}
+			if value == "-" {
+				data, err := io.ReadAll(os.Stdin)
+				if err != nil {
+					return fmt.Errorf("read stdin: %w", err)
+				}
+				value = strings.TrimSpace(string(data))
+				if value == "" {
+					return fmt.Errorf("empty secret value from stdin")
+				}
+			}
 
 			if err := globalVault.Set(name, value); err != nil {
 				return fmt.Errorf("set secret: %w", err)
@@ -118,6 +152,7 @@ func setCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
 }
 
 // getCmd retrieves a secret

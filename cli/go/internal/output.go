@@ -6,9 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
@@ -187,17 +185,6 @@ func PrintJSON(v any) {
 	if err := enc.Encode(v); err != nil {
 		fmt.Fprintf(os.Stderr, "json encode error: %v\n", err)
 	}
-}
-
-// ── Spinner ──────────────────────────────────────────────
-
-// StartSpinner creates and starts a spinner with the given message.
-// Call s.Stop() when done.
-func StartSpinner(msg string) *spinner.Spinner {
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Prefix = msg + " "
-	s.Start()
-	return s
 }
 
 // ── Color ────────────────────────────────────────────────

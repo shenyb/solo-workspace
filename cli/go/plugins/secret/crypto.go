@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
+	core "github.com/shenyb/solo-workspace/cli/go/internal"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -35,6 +36,8 @@ type SecretVault struct {
 	encryptedData   string            // raw base64 blob from disk (new format), decrypted once masterKey is set
 	legacyEncrypted map[string]string // individually encrypted values from old vault format (migrated on first write)
 	secrets         map[string]string
+	locked          bool // true when existing vault could not be decrypted
+	hadExistingFile bool
 }
 
 // NewSecretVault creates a new secret vault in the given data directory.
@@ -69,56 +72,62 @@ func NewSecretVault(dataDir string) (*SecretVault, error) {
 
 // SetMasterPassword derives the encryption key from the master password and the
 // vault's salt, then decrypts any data that was loaded from disk.
-//
-// Legacy vaults (per-value encryption with hardcoded salt) are migrated on
-// the first call: each value is decrypted with the old scheme and a fresh
-// random salt is generated for future saves.
-func (sv *SecretVault) SetMasterPassword(password string) {
+func (sv *SecretVault) SetMasterPassword(password string) error {
 	// ── Legacy vault migration ────────────────────────────────────
 	if sv.legacyEncrypted != nil {
-		// Derive key with old hardcoded salt (same as pre-fix code).
 		oldSalt := []byte("solo-workspace-secret-salt")
 		oldKey := pbkdf2.Key([]byte(password), oldSalt, 100000, 32, sha256.New)
 
-		// Decrypt each legacy value.
+		var failed []string
 		for k, encryptedVal := range sv.legacyEncrypted {
 			plaintext, err := decryptLegacyValue(oldKey, encryptedVal)
 			if err != nil {
-				continue // skip undecryptable entries (wrong password, corrupted)
+				failed = append(failed, k)
+				continue
 			}
 			sv.secrets[k] = plaintext
 		}
+		if len(failed) > 0 {
+			sv.masterKey = nil
+			sv.locked = true
+			return fmt.Errorf("failed to decrypt legacy secrets (wrong password?): %v", failed)
+		}
 
-		// Generate a fresh random salt so the next Save() writes a
-		// properly salted vaultFile.
 		sv.salt = make([]byte, 32)
 		if _, err := io.ReadFull(rand.Reader, sv.salt); err != nil {
-			// Extremely unlikely — non-fatal fallback.
 			copy(sv.salt, oldSalt)
 		}
 
-		// Derive new key from the fresh salt.
 		sv.masterKey = pbkdf2.Key([]byte(password), sv.salt, 100000, 32, sha256.New)
 		sv.legacyEncrypted = nil
-		return
+		sv.locked = false
+		return nil
 	}
 
 	// ── Normal flow (new vaultFile format) ────────────────────────
 	sv.masterKey = pbkdf2.Key([]byte(password), sv.salt, 100000, 32, sha256.New)
 
-	// If an encrypted blob was loaded from disk, decrypt it now.
 	if sv.encryptedData != "" {
-		if decrypted, err := sv.decryptBlob(sv.encryptedData); err == nil {
-			sv.secrets = decrypted
+		decrypted, err := sv.decryptBlob(sv.encryptedData)
+		if err != nil {
+			// Keep encryptedData intact; never clear it unless decryption succeeds.
+			sv.masterKey = nil
+			sv.locked = true
+			return fmt.Errorf("vault decryption failed (wrong password?): %w", err)
 		}
-		// Decryption failure (wrong password) leaves sv.secrets as an empty map.
-		// The user will see "secret not found" on get/list — no data loss.
+		sv.secrets = decrypted
 		sv.encryptedData = ""
 	}
+
+	sv.locked = false
+	return nil
 }
 
 // Set stores a secret, persists to disk immediately.
 func (sv *SecretVault) Set(key, value string) error {
+	if sv.locked {
+		return fmt.Errorf("vault is locked; cannot save (wrong master password?)")
+	}
 	if len(sv.masterKey) == 0 {
 		return fmt.Errorf("master password not set")
 	}
@@ -128,6 +137,9 @@ func (sv *SecretVault) Set(key, value string) error {
 
 // Get retrieves a decrypted secret.
 func (sv *SecretVault) Get(key string) (string, error) {
+	if sv.locked {
+		return "", fmt.Errorf("vault is locked (wrong master password?)")
+	}
 	if len(sv.masterKey) == 0 {
 		return "", fmt.Errorf("master password not set")
 	}
@@ -140,6 +152,15 @@ func (sv *SecretVault) Get(key string) (string, error) {
 
 // Delete removes a secret and persists to disk.
 func (sv *SecretVault) Delete(key string) error {
+	if sv.locked {
+		return fmt.Errorf("vault is locked; cannot save (wrong master password?)")
+	}
+	if len(sv.masterKey) == 0 {
+		return fmt.Errorf("master password not set")
+	}
+	if _, exists := sv.secrets[key]; !exists {
+		return fmt.Errorf("secret not found: %s", key)
+	}
 	delete(sv.secrets, key)
 	return sv.Save()
 }
@@ -243,9 +264,17 @@ func decryptLegacyValue(masterKey []byte, encoded string) (string, error) {
 }
 
 // Save persists the entire secrets map as a single encrypted blob.
-// The on-disk format reveals only the salt and the encrypted payload — secret
-// names are never stored in plaintext.
 func (sv *SecretVault) Save() error {
+	if sv.locked {
+		return fmt.Errorf("vault is locked; cannot save (wrong master password?)")
+	}
+	// Belt-and-suspenders: refuse to overwrite disk while ciphertext is still undecrypted.
+	if sv.encryptedData != "" {
+		return fmt.Errorf("vault has undecrypted data; refusing to save (wrong master password?)")
+	}
+	if len(sv.masterKey) == 0 {
+		return fmt.Errorf("master password not set")
+	}
 	encrypted, err := sv.encryptBlob()
 	if err != nil {
 		return fmt.Errorf("encrypt: %w", err)
@@ -261,7 +290,7 @@ func (sv *SecretVault) Save() error {
 		return fmt.Errorf("marshal: %w", err)
 	}
 
-	return os.WriteFile(sv.path, out, 0o600)
+	return core.WriteFileAtomic(sv.path, out, 0o600)
 }
 
 // Load reads the vault file from disk.
@@ -276,6 +305,7 @@ func (sv *SecretVault) Load() error {
 	if err != nil {
 		return err
 	}
+	sv.hadExistingFile = true
 
 	// Try new vaultFile format first.
 	var wrapper vaultFile

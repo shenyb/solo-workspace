@@ -14,7 +14,7 @@ import (
 )
 
 // envDB manages environment variables persistently.
-// Stored in <data-dir>/env.yaml; data dir is derived from the active config file.
+// Stored in <data-dir>/env.local (dotenv format); legacy env.yaml is migrated on save.
 // Sensitive vars (marked with secret_*) are encrypted via secret plugin.
 type envDB struct {
 	vars map[string]string // name -> value
@@ -40,7 +40,7 @@ func ensureDB() error {
 	}
 	db = &envDB{
 		vars: make(map[string]string),
-		path: filepath.Join(dataDir, "env.yaml"),
+		path: filepath.Join(dataDir, envFileName),
 	}
 	envDataDir = dataDir
 	return db.load()
@@ -68,8 +68,9 @@ Examples:
   sw env set secret_db_password "p@ssw0rd"  # Save encrypted var
   sw env get DB_HOST                        # Retrieve variable
   sw env list                                # Show all variables
-  sw env export > .env                      # Export as .env format
-  sw env export --prefix secret_            # Export only secret vars
+  sw env export > .env                      # Export (.env plaintext vars; vault secrets masked)
+  sw env export --unmasked > .env           # Include decrypted vault values (use with care)
+  sw env export --prefix secret_            # Export only matching names
   sw env delete DB_HOST                     # Remove variable
   sw env unset-secret DB_PASSWORD          # Remove from secret vault
 `,
@@ -86,6 +87,9 @@ Examples:
 			secretList, err := secret.ListSecrets()
 			if err == nil {
 				for _, name := range secretList {
+					if !strings.HasPrefix(name, "secret_") {
+						continue
+					}
 					fmt.Printf("  • %s (secret)\n", name)
 				}
 			}
@@ -215,10 +219,13 @@ func listCmd() *cobra.Command {
 				}
 			}
 
-			// Show secret variables
+			// Show env-managed secret variables only (secret_ prefix)
 			secretList, err := secret.ListSecrets()
 			if err == nil {
 				for _, name := range secretList {
+					if !strings.HasPrefix(name, "secret_") {
+						continue
+					}
 					if prefix == "" || strings.HasPrefix(name, prefix) {
 						fmt.Printf("  • %s (secret)\n", name)
 					}
@@ -231,6 +238,27 @@ func listCmd() *cobra.Command {
 
 	cmd.Flags().StringP("prefix", "p", "", "Filter by variable name prefix")
 	return cmd
+}
+
+// exportVaultLines formats vault secret entries for env export output.
+// All vault keys are masked unless unmasked is true (--unmasked).
+func exportVaultLines(names []string, fetch func(string) (string, error), prefix string, masked, unmasked bool) ([]string, error) {
+	var lines []string
+	for _, name := range names {
+		if prefix != "" && !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		if masked || !unmasked {
+			lines = append(lines, fmt.Sprintf("%s=***masked***", name))
+			continue
+		}
+		val, err := fetch(name)
+		if err != nil {
+			return nil, fmt.Errorf("get secret %s: %w", name, err)
+		}
+		lines = append(lines, fmt.Sprintf("%s=%s", name, val))
+	}
+	return lines, nil
 }
 
 // exportCmd exports environment variables in .env format
@@ -257,20 +285,15 @@ func exportCmd() *cobra.Command {
 				}
 			}
 
-			// Add secret variables
+			// Vault secrets are always masked unless --unmasked (applies to all vault keys).
 			secretList, err := secret.ListSecrets()
 			if err == nil {
-				for _, name := range secretList {
-					if prefix != "" && !strings.HasPrefix(name, prefix) {
-						continue
-					}
-					if masked || strings.HasPrefix(name, "secret_") {
-						lines = append(lines, fmt.Sprintf("%s=***masked***", name))
-					} else {
-						val, _ := secret.GetSecret(name)
-						lines = append(lines, fmt.Sprintf("%s=%s", name, val))
-					}
+				unmasked, _ := cmd.Flags().GetBool("unmasked")
+				vaultLines, err := exportVaultLines(secretList, secret.GetSecret, prefix, masked, unmasked)
+				if err != nil {
+					return err
 				}
+				lines = append(lines, vaultLines...)
 			}
 
 			output := strings.Join(lines, "\n")
@@ -294,7 +317,8 @@ func exportCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringP("prefix", "p", "", "Export only variables with this prefix")
-	cmd.Flags().BoolP("masked", "m", false, "Mask sensitive values with ***masked***")
+	cmd.Flags().BoolP("masked", "m", false, "Mask plaintext env.local values with ***masked***")
+	cmd.Flags().Bool("unmasked", false, "Export decrypted vault secret values (default: all vault keys masked)")
 	return cmd
 }
 
@@ -332,14 +356,22 @@ func ListEnvVarNames() []string {
 	return names
 }
 
-// load reads environment variables from env.yaml in the data directory.
+// load reads environment variables from env.local (dotenv) in the data directory.
+// Falls back to legacy env.yaml when env.local is absent.
 func (e *envDB) load() error {
 	data, err := os.ReadFile(e.path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("read env file: %w", err)
 		}
-		return fmt.Errorf("read env file: %w", err)
+		legacy := filepath.Join(filepath.Dir(e.path), envFileLegacy)
+		data, err = os.ReadFile(legacy)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return fmt.Errorf("read env file: %w", err)
+		}
 	}
 
 	scanner := bufio.NewScanner(strings.NewReader(string(data)))
@@ -350,32 +382,37 @@ func (e *envDB) load() error {
 		}
 
 		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 {
-			name := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-			// Remove quotes if present
-			if len(value) >= 2 && ((value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'')) {
-				value = value[1 : len(value)-1]
-			}
-			e.vars[name] = value
+		if len(parts) != 2 {
+			continue
 		}
+		name := strings.TrimSpace(parts[0])
+		if name == "" {
+			continue
+		}
+		value, err := parseEnvStoredValue(parts[1])
+		if err != nil {
+			return fmt.Errorf("parse env var %q: %w", name, err)
+		}
+		e.vars[name] = value
 	}
 
 	return scanner.Err()
 }
 
-// save writes environment variables to env.yaml in the data directory.
+// save writes environment variables to env.local (dotenv) in the data directory.
 func (e *envDB) save() error {
 	var lines []string
-	lines = append(lines, "# Environment variables managed by solo-workspace")
+	lines = append(lines, "# solo-workspace environment variables (dotenv format — not YAML)")
+	lines = append(lines, "# Managed by: sw env")
 
-	for name, value := range e.vars {
-		// Quote values that contain spaces or special chars
-		quotedValue := value
-		if strings.ContainsAny(value, " \t\n#=") {
-			quotedValue = fmt.Sprintf("%q", value)
-		}
-		lines = append(lines, fmt.Sprintf("%s=%s", name, quotedValue))
+	names := make([]string, 0, len(e.vars))
+	for name := range e.vars {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		value := e.vars[name]
+		lines = append(lines, fmt.Sprintf("%s=%s", name, formatEnvStoredValue(value)))
 	}
 
 	data := strings.Join(lines, "\n")
@@ -383,9 +420,12 @@ func (e *envDB) save() error {
 		data += "\n"
 	}
 
-	if err := os.WriteFile(e.path, []byte(data), 0600); err != nil {
+	if err := core.WriteFileAtomic(e.path, []byte(data), 0600); err != nil {
 		return fmt.Errorf("write env file: %w", err)
 	}
 
+	// Migrate away from legacy filename after a successful save.
+	legacy := filepath.Join(filepath.Dir(e.path), envFileLegacy)
+	_ = os.Remove(legacy)
 	return nil
 }

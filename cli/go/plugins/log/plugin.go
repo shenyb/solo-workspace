@@ -66,7 +66,7 @@ func saveStore() error {
 	if err != nil {
 		return fmt.Errorf("marshal log: %w", err)
 	}
-	if err := os.WriteFile(store.path, data, 0600); err != nil {
+	if err := core.WriteFileAtomic(store.path, data, 0600); err != nil {
 		return fmt.Errorf("write log: %w", err)
 	}
 	return nil
@@ -81,8 +81,9 @@ func Cmd() *cobra.Command {
 
 Examples:
   sw log "修复登录 OAuth bug"
+  sw log add "fixed bug" --at 14:30
   sw log today
-  sw log --since 3d
+  sw log since 3d
   sw log list
 `,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -96,10 +97,11 @@ Examples:
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: []string{},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return addLog(args[0])
+			at, _ := cmd.Flags().GetString("at")
+			return addLog(args[0], at)
 		},
 	}
-	addCmd.Flags().String("at", "", "Set timestamp (format: 15:04)")
+	addCmd.Flags().String("at", "", "Set time today (format: 15:04)")
 	cmd.AddCommand(addCmd)
 
 	cmd.AddCommand(&cobra.Command{
@@ -128,26 +130,32 @@ Examples:
 	}
 	cmd.AddCommand(sinceCmd)
 
-	// If no subcommand is given (just `sw log <text>`), treat as add
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return cmd.Help()
 		}
-		// `sw log today`, `sw log list`, `sw log since 3d` are handled by subcommands
-		// If we reach here with args, it's a plain text → add
-		return addLog(strings.Join(args, " "))
+		return addLog(strings.Join(args, " "), "")
 	}
 
 	return cmd
 }
 
-func addLog(text string) error {
+func addLog(text, at string) error {
+	ts := time.Now()
+	if at != "" {
+		parsed, err := time.Parse("15:04", at)
+		if err != nil {
+			return fmt.Errorf("invalid --at %q: use format 15:04", at)
+		}
+		now := time.Now()
+		ts = time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, now.Location())
+	}
+
 	store.Entries = append(store.Entries, LogEntry{
-		Time: time.Now(),
+		Time: ts,
 		Text: text,
 	})
 
-	// Keep last 500 entries to avoid file bloat
 	if len(store.Entries) > 500 {
 		store.Entries = store.Entries[len(store.Entries)-500:]
 	}
@@ -159,6 +167,10 @@ func addLog(text string) error {
 	return nil
 }
 
+func startOfToday(now time.Time) time.Time {
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+}
+
 func listLogs(filter string, limit int) error {
 	if len(store.Entries) == 0 {
 		fmt.Println("No log entries yet. Use: sw log \"what you did\"")
@@ -167,16 +179,16 @@ func listLogs(filter string, limit int) error {
 
 	var filtered []LogEntry
 	now := time.Now()
-	today := now.Truncate(24 * time.Hour)
+	todayStart := startOfToday(now)
 
 	for _, e := range store.Entries {
 		switch {
 		case filter == "today":
-			if e.Time.Before(today) {
+			if e.Time.Before(todayStart) {
 				continue
 			}
 		case filter != "" && filter != "today":
-			d, err := time.ParseDuration(filter)
+			d, err := core.ParseDurationDays(filter)
 			if err != nil {
 				return fmt.Errorf("invalid duration %q, use e.g. 3d, 24h, 7d", filter)
 			}
@@ -192,7 +204,6 @@ func listLogs(filter string, limit int) error {
 		return nil
 	}
 
-	// Sort newest first
 	sort.Slice(filtered, func(i, j int) bool {
 		return filtered[i].Time.After(filtered[j].Time)
 	})

@@ -36,6 +36,9 @@ Docker containers, and more — all from your terminal.
 Run without arguments to show an overview of all resources.
 Use "sw tui" to enter the interactive menu.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if isCompletionCommand(cmd) {
+			return nil
+		}
 		var err error
 		core.CurrentConfig, err = core.LoadConfig(cfgFile)
 		if err != nil {
@@ -146,6 +149,9 @@ func printAll(cfg *core.Config) {
 		rows := make([][]string, 0, len(cfg.Servers))
 		for _, name := range names {
 			srv := cfg.Servers[name]
+			if srv == nil {
+				continue
+			}
 			port := 22
 			if srv.Port > 0 {
 				port = srv.Port
@@ -210,10 +216,11 @@ func printAll(cfg *core.Config) {
 	}
 
 	// Secrets
-	var secretNames []string
 	if err := secret.InitVault(); err != nil {
-		fmt.Println(core.Warn("No secrets."))
-	} else if secretNames, err = secret.ListSecrets(); err != nil || len(secretNames) == 0 {
+		fmt.Println(core.Warn("Secrets unavailable:"), err)
+	} else if secretNames, err := secret.ListSecrets(); err != nil {
+		fmt.Println(core.Warn("Secrets unavailable:"), err)
+	} else if len(secretNames) == 0 {
 		fmt.Println(core.Warn("No secrets."))
 	} else {
 		title := core.Info("Secrets:") + " " + core.Success(fmt.Sprintf("(%d)", len(secretNames)))
@@ -496,7 +503,13 @@ func removeBlock(path, start, end string) error {
 		return nil
 	}
 	endIndex += startIndex + len(end)
-	newText := strings.TrimSuffix(text[:startIndex]+text[endIndex:], "\n")
+
+	blockStart := startIndex
+	if blockStart > 0 && text[blockStart-1] == '\n' {
+		blockStart--
+	}
+
+	newText := text[:blockStart] + text[endIndex:]
 	return os.WriteFile(path, []byte(newText), 0o644)
 }
 
@@ -519,17 +532,25 @@ func launchTUI() error {
 		self = os.Args[0]
 	}
 
+	withConfig := func(parts ...string) []string {
+		cmd := []string{self}
+		if cfgFile != "" {
+			cmd = append(cmd, "-c", cfgFile)
+		}
+		return append(cmd, parts...)
+	}
+
 	items := []core.MenuItem{
 		{
 			Label:       "all",
 			Description: "Show overview of all resources",
-			Command:     []string{self, "all"},
+			Command:     withConfig("all"),
 		},
 		{
 			Label:       "ssl",
 			Description: "SSL certificate management",
 			Children: []core.MenuItem{
-				{Label: "check", Description: "Check all domain SSL certificates", Command: []string{self, "ssl", "check"}},
+				{Label: "check", Description: "Check all domain SSL certificates", Command: withConfig("ssl", "check")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -537,11 +558,11 @@ func launchTUI() error {
 			Label:       "server",
 			Description: "Server management",
 			Children: []core.MenuItem{
-				{Label: "list", Description: "List configured servers", Command: []string{self, "server", "list"}},
-				{Label: "add", Description: "Add a server", Command: []string{self, "server", "add"}},
-				{Label: "update", Description: "Update a server", Command: []string{self, "server", "update"}},
-				{Label: "delete", Description: "Delete a server", Command: []string{self, "server", "delete"}},
-				{Label: "ssh", Description: "SSH into a server", Command: []string{self, "server", "ssh"}},
+				{Label: "list", Description: "List configured servers", Command: withConfig("server", "list")},
+				{Label: "add", Description: "Add a server", Command: withConfig("server", "add")},
+				{Label: "update", Description: "Update a server", Command: withConfig("server", "update")},
+				{Label: "delete", Description: "Delete a server", Command: withConfig("server", "delete")},
+				{Label: "ssh", Description: "SSH into a server", Command: withConfig("server", "ssh")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -549,7 +570,7 @@ func launchTUI() error {
 			Label:       "domain",
 			Description: "Domain management",
 			Children: []core.MenuItem{
-				{Label: "list", Description: "List configured domains", Command: []string{self, "domain", "list"}},
+				{Label: "list", Description: "List configured domains", Command: withConfig("domain", "list")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -557,7 +578,7 @@ func launchTUI() error {
 			Label:       "project",
 			Description: "Project management",
 			Children: []core.MenuItem{
-				{Label: "list", Description: "List projects", Command: []string{self, "project", "list"}},
+				{Label: "list", Description: "List projects", Command: withConfig("project", "list")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -565,7 +586,7 @@ func launchTUI() error {
 			Label:       "todo",
 			Description: "Todo task management",
 			Children: []core.MenuItem{
-				{Label: "list", Description: "List todos", Command: []string{self, "todo", "list"}},
+				{Label: "list", Description: "List todos", Command: withConfig("todo", "list")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -573,7 +594,7 @@ func launchTUI() error {
 			Label:       "notify",
 			Description: "Email notification",
 			Children: []core.MenuItem{
-				{Label: "test", Description: "Send test notification", Command: []string{self, "notify", "test"}},
+				{Label: "test", Description: "Send test notification", Command: withConfig("notify", "test")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -581,7 +602,7 @@ func launchTUI() error {
 			Label:       "secret",
 			Description: "Encrypted secrets (API keys, tokens)",
 			Children: []core.MenuItem{
-				{Label: "list", Description: "List stored secrets", Command: []string{self, "secret", "list"}},
+				{Label: "list", Description: "List stored secrets", Command: withConfig("secret", "list")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -589,8 +610,8 @@ func launchTUI() error {
 			Label:       "config",
 			Description: "Config management (show/export/import/set/get)",
 			Children: []core.MenuItem{
-				{Label: "show", Description: "Show current config", Command: []string{self, "config", "show"}},
-				{Label: "export", Description: "Export config to stdout", Command: []string{self, "config", "export"}},
+				{Label: "show", Description: "Show current config", Command: withConfig("config", "show")},
+				{Label: "export", Description: "Export config to stdout", Command: withConfig("config", "export")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -598,8 +619,17 @@ func launchTUI() error {
 			Label:       "env",
 			Description: "Environment variables (.env)",
 			Children: []core.MenuItem{
-				{Label: "list", Description: "List stored env vars", Command: []string{self, "env", "list"}},
-				{Label: "export", Description: "Export as .env format", Command: []string{self, "env", "export"}},
+				{Label: "list", Description: "List stored env vars", Command: withConfig("env", "list")},
+				{Label: "export", Description: "Export as .env format", Command: withConfig("env", "export")},
+				{Label: "..", Description: "Back", IsBack: true},
+			},
+		},
+		{
+			Label:       "log",
+			Description: "Time log",
+			Children: []core.MenuItem{
+				{Label: "list", Description: "List recent log entries", Command: withConfig("log", "list")},
+				{Label: "today", Description: "Show today's entries", Command: withConfig("log", "today")},
 				{Label: "..", Description: "Back", IsBack: true},
 			},
 		},
@@ -611,7 +641,16 @@ func launchTUI() error {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func isCompletionCommand(cmd *cobra.Command) bool {
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Name() == "completion" {
+			return true
+		}
+	}
+	return false
 }

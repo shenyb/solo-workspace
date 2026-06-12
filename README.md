@@ -127,11 +127,11 @@ SW loads config in this order (first found wins):
 | Priority | Path | Use Case |
 |----------|------|----------|
 | 1 | `-c <path>` / `--config <path>` | Manual override |
-| 2 | `~/.solo/config.yaml` | Global settings (all projects) |
-| 3 | `.solo.yaml` (cwd) | Per-project config |
+| 2 | `.solo.yaml` (cwd) | Per-project config |
+| 3 | `~/.solo/config.yaml` | Global settings (all projects) |
 | 4 | _(none)_ | Empty defaults |
 
-Data files (`env.yaml`, `secrets.enc`) live alongside the active config file — when using the default `~/.solo/config.yaml` they stay in `~/.solo/`; when using `-c /path/to/config.yaml` they follow to `/path/to/`.
+Data files (`env.local`, `secrets.enc`) live alongside the active config file — when using the default `~/.solo/config.yaml` they stay in `~/.solo/`; when using `-c /path/to/config.yaml` they follow to `/path/to/`.
 
 **Minimal `~/.solo/config.yaml`:**
 
@@ -151,7 +151,8 @@ notify:
     host: smtp.example.com
     port: 587
     username: user@example.com
-    password: app-password
+    password_secret: smtp_password   # preferred: vault key via sw secret set
+    # password: app-password         # or plaintext (not recommended)
     from: user@example.com
     to:
       - admin@example.com

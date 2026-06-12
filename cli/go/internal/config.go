@@ -9,8 +9,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ConfigPath is the default config file location.
-// Priority: ./.solo.yaml > ~/.solo/config.yaml
+// ConfigPath is the active config file location.
+// Priority: -c flag > ./.solo.yaml > ~/.solo/config.yaml
 var ConfigPath string
 
 // CurrentConfig is the global config loaded at startup.
@@ -39,11 +39,15 @@ type ServerConfig struct {
 	Extra map[string]interface{} `yaml:"-"` // Dynamic fields
 }
 
-// UnmarshalYAML custom unmarshaler for ServerConfig to capture extra fields
-func (s *ServerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+// UnmarshalYAML implements yaml.v3 Unmarshaler to capture unknown fields in Extra.
+func (s *ServerConfig) UnmarshalYAML(value *yaml.Node) error {
+	*s = ServerConfig{}
 	var raw map[string]interface{}
-	if err := unmarshal(&raw); err != nil {
+	if err := value.Decode(&raw); err != nil {
 		return err
+	}
+	if raw == nil {
+		raw = map[string]interface{}{}
 	}
 
 	if host, ok := raw["host"].(string); ok {
@@ -52,7 +56,7 @@ func (s *ServerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if user, ok := raw["user"].(string); ok {
 		s.User = user
 	}
-	if port, ok := raw["port"].(int); ok {
+	if port, ok := ParseYAMLInt(raw["port"]); ok {
 		s.Port = port
 	}
 
@@ -81,14 +85,15 @@ func (s *ServerConfig) MarshalYAML() (interface{}, error) {
 
 // EmailConfig configures SMTP email delivery.
 type EmailConfig struct {
-	Enabled  bool     `yaml:"enabled,omitempty"`
-	Host     string   `yaml:"host"`
-	Port     int      `yaml:"port"`
-	Username string   `yaml:"username,omitempty"`
-	Password string   `yaml:"password,omitempty"`
-	From     string   `yaml:"from"`
-	To       []string `yaml:"to"`
-	UseTLS   bool     `yaml:"use_tls,omitempty"`
+	Enabled        bool     `yaml:"enabled,omitempty"`
+	Host           string   `yaml:"host"`
+	Port           int      `yaml:"port"`
+	Username       string   `yaml:"username,omitempty"`
+	Password       string   `yaml:"password,omitempty"`
+	PasswordSecret string   `yaml:"password_secret,omitempty"` // vault key instead of plaintext password
+	From           string   `yaml:"from"`
+	To             []string `yaml:"to"`
+	UseTLS         bool     `yaml:"use_tls,omitempty"`
 }
 
 // NotifyConfig configures notification channels.
@@ -116,14 +121,18 @@ type ProjectConfig struct {
 	Extra       map[string]interface{} `yaml:"-"` // Dynamic fields
 }
 
-// UnmarshalYAML custom unmarshaler for ProjectConfig to capture extra fields
-func (p *ProjectConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+// UnmarshalYAML implements yaml.v3 Unmarshaler to capture unknown fields in Extra.
+func (p *ProjectConfig) UnmarshalYAML(value *yaml.Node) error {
+	*p = ProjectConfig{}
 	var raw map[string]interface{}
-	if err := unmarshal(&raw); err != nil {
+	if err := value.Decode(&raw); err != nil {
 		return err
 	}
+	if raw == nil {
+		raw = map[string]interface{}{}
+	}
 
-	if id, ok := raw["id"].(int); ok {
+	if id, ok := ParseYAMLInt(raw["id"]); ok {
 		p.ID = id
 	}
 	if path, ok := raw["path"].(string); ok {
@@ -162,7 +171,7 @@ func (p *ProjectConfig) MarshalYAML() (interface{}, error) {
 	return m, nil
 }
 
-// DataDir returns the directory for env.yaml, secrets.enc, etc.
+// DataDir returns the directory for env.local, secrets.enc, etc.
 // Files live alongside the active config file (same directory).
 func DataDir() (string, error) {
 	path := ConfigPath
@@ -193,20 +202,18 @@ func DefaultConfig() *Config {
 }
 
 // LoadConfig loads config from the given path or finds one automatically.
-// Priority: -c flag > ~/.solo/config.yaml > ./.solo.yaml > defaults
+// Priority: -c flag > ./.solo.yaml > ~/.solo/config.yaml > defaults
 func LoadConfig(path string) (*Config, error) {
 	if path == "" {
-		// Try user home first
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("cannot find home dir: %w", err)
 		}
-		homePath := home + "/.solo/config.yaml"
-		if _, err := os.Stat(homePath); err == nil {
-			path = homePath
-		} else if _, err := os.Stat(".solo.yaml"); err == nil {
-			// Fall back to local
+		homePath := filepath.Join(home, ".solo", "config.yaml")
+		if _, err := os.Stat(".solo.yaml"); err == nil {
 			path = ".solo.yaml"
+		} else if _, err := os.Stat(homePath); err == nil {
+			path = homePath
 		} else {
 			path = homePath // will hit os.IsNotExist below → DefaultConfig
 		}
@@ -231,16 +238,23 @@ func LoadConfig(path string) (*Config, error) {
 
 // SaveConfig writes CurrentConfig back to the file it was loaded from.
 // If no config file was loaded (ConfigPath is empty), it writes to ./.solo.yaml.
+// Parent directories (e.g. ~/.solo) are created on first save via WriteFileAtomic.
 func SaveConfig() error {
 	path := ConfigPath
 	if path == "" {
 		path = ".solo.yaml"
 	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolve config path: %w", err)
+	}
+	path = absPath
+
 	data, err := yaml.Marshal(CurrentConfig)
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := WriteFileAtomic(path, data, 0600); err != nil {
 		return fmt.Errorf("write config %s: %w", path, err)
 	}
 	ConfigPath = path

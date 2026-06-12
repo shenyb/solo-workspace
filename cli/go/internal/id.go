@@ -7,45 +7,108 @@ import (
 	"time"
 )
 
-// EnsureIDs assigns auto-increment IDs to projects and todos that lack one.
-// New IDs are assigned in stable name-sorted order to avoid map iteration drift.
+// EnsureIDs assigns auto-increment IDs and resolves duplicate IDs.
 func EnsureIDs(cfg *Config) {
 	if cfg == nil {
 		return
 	}
 	if cfg.Projects != nil {
-		next := maxProjectID(cfg) + 1
-		names := make([]string, 0, len(cfg.Projects))
-		for name := range cfg.Projects {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			if cfg.Projects[name].ID == 0 {
-				cfg.Projects[name].ID = next
-				next++
-			}
-		}
+		ensureProjectIDs(cfg)
 	}
 	if cfg.Todos != nil {
-		next := maxTodoID(cfg) + 1
-		names := make([]string, 0, len(cfg.Todos))
-		for name := range cfg.Todos {
-			names = append(names, name)
+		ensureTodoIDs(cfg)
+	}
+}
+
+func ensureProjectIDs(cfg *Config) {
+	used := make(map[int]string)
+	names := sortedKeys(cfg.Projects)
+	next := maxProjectID(cfg) + 1
+
+	for _, name := range names {
+		if cfg.Projects[name] == nil {
+			cfg.Projects[name] = &ProjectConfig{}
 		}
-		sort.Strings(names)
-		for _, name := range names {
-			if cfg.Todos[name].ID == 0 {
-				cfg.Todos[name].ID = next
+		if cfg.Projects[name].ID == 0 {
+			for used[next] != "" {
 				next++
 			}
+			cfg.Projects[name].ID = next
+			used[next] = name
+			next++
 		}
 	}
+	for _, name := range names {
+		id := cfg.Projects[name].ID
+		if owner, ok := used[id]; ok && owner != name {
+			for used[next] != "" {
+				next++
+			}
+			cfg.Projects[name].ID = next
+			used[next] = name
+			next++
+		} else {
+			used[id] = name
+		}
+	}
+}
+
+func ensureTodoIDs(cfg *Config) {
+	used := make(map[int]string)
+	names := sortedKeysTodos(cfg)
+	next := maxTodoID(cfg) + 1
+	for _, name := range names {
+		if cfg.Todos[name] == nil {
+			cfg.Todos[name] = &TodoConfig{}
+		}
+		if cfg.Todos[name].ID == 0 {
+			for used[next] != "" {
+				next++
+			}
+			cfg.Todos[name].ID = next
+			used[next] = name
+			next++
+		}
+	}
+	for _, name := range names {
+		id := cfg.Todos[name].ID
+		if owner, ok := used[id]; ok && owner != name {
+			for used[next] != "" {
+				next++
+			}
+			cfg.Todos[name].ID = next
+			used[next] = name
+			next++
+		} else {
+			used[id] = name
+		}
+	}
+}
+
+func sortedKeys(m map[string]*ProjectConfig) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func sortedKeysTodos(cfg *Config) []string {
+	names := make([]string, 0, len(cfg.Todos))
+	for name := range cfg.Todos {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func maxProjectID(cfg *Config) int {
 	max := 0
 	for _, p := range cfg.Projects {
+		if p == nil {
+			continue
+		}
 		if p.ID > max {
 			max = p.ID
 		}
@@ -56,6 +119,9 @@ func maxProjectID(cfg *Config) int {
 func maxTodoID(cfg *Config) int {
 	max := 0
 	for _, t := range cfg.Todos {
+		if t == nil {
+			continue
+		}
 		if t.ID > max {
 			max = t.ID
 		}
@@ -88,7 +154,7 @@ func ProjectByID(cfg *Config, id int) (string, *ProjectConfig, error) {
 		return "", nil, fmt.Errorf("project id %d not found", id)
 	}
 	for name, p := range cfg.Projects {
-		if p.ID == id {
+		if p != nil && p.ID == id {
 			return name, p, nil
 		}
 	}
@@ -101,7 +167,7 @@ func TodoByID(cfg *Config, id int) (string, *TodoConfig, error) {
 		return "", nil, fmt.Errorf("todo id %d not found", id)
 	}
 	for name, t := range cfg.Todos {
-		if t.ID == id {
+		if t != nil && t.ID == id {
 			return name, t, nil
 		}
 	}
@@ -121,6 +187,9 @@ func SortedProjects(cfg *Config) []ProjectEntry {
 	}
 	entries := make([]ProjectEntry, 0, len(cfg.Projects))
 	for name, p := range cfg.Projects {
+		if p == nil {
+			continue
+		}
 		entries = append(entries, ProjectEntry{Name: name, Config: p})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -142,6 +211,9 @@ func SortedTodos(cfg *Config) []TodoEntry {
 	}
 	entries := make([]TodoEntry, 0, len(cfg.Todos))
 	for name, t := range cfg.Todos {
+		if t == nil {
+			continue
+		}
 		entries = append(entries, TodoEntry{Name: name, Config: t})
 	}
 	sort.Slice(entries, func(i, j int) bool {

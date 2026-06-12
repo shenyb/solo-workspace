@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 
 	core "github.com/shenyb/solo-workspace/cli/go/internal"
 	"github.com/spf13/cobra"
@@ -56,7 +57,9 @@ func Cmd() *cobra.Command {
 			user, _ := cmd.Flags().GetString("user")
 			port, _ := cmd.Flags().GetInt("port")
 			portSet := cmd.Flags().Changed("port")
-			return updateServer(args[0], host, user, port, portSet)
+			hostSet := cmd.Flags().Changed("host")
+			userSet := cmd.Flags().Changed("user")
+			return updateServer(args[0], host, user, port, portSet, hostSet, userSet)
 		},
 	}
 	updateCmd.Flags().String("host", "", "New host or IP address")
@@ -105,6 +108,9 @@ func listServers() error {
 	rows := make([][]string, 0, len(names))
 	for _, name := range names {
 		srv := cfg.Servers[name]
+		if srv == nil {
+			continue
+		}
 		port := 22
 		if srv.Port > 0 {
 			port = srv.Port
@@ -116,6 +122,13 @@ func listServers() error {
 }
 
 func addServer(name, host, user string, port int) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("server name must not be empty")
+	}
+	if err := validateServerConnection(host, user, port); err != nil {
+		return err
+	}
+
 	cfg := core.CurrentConfig
 	if cfg == nil {
 		cfg = core.DefaultConfig()
@@ -128,8 +141,8 @@ func addServer(name, host, user string, port int) error {
 	}
 
 	cfg.Servers[name] = &core.ServerConfig{
-		Host: host,
-		User: user,
+		Host: strings.TrimSpace(host),
+		User: strings.TrimSpace(user),
 		Port: port,
 	}
 	core.CurrentConfig = cfg
@@ -142,7 +155,7 @@ func addServer(name, host, user string, port int) error {
 	return nil
 }
 
-func updateServer(name, host, user string, port int, portSet bool) error {
+func updateServer(name, host, user string, port int, portSet, hostSet, userSet bool) error {
 	cfg := core.CurrentConfig
 	if cfg == nil || cfg.Servers == nil {
 		return fmt.Errorf("server %q not found", name)
@@ -153,17 +166,25 @@ func updateServer(name, host, user string, port int, portSet bool) error {
 		return fmt.Errorf("server %q not found", name)
 	}
 
-	if host == "" && user == "" && !portSet {
+	if !hostSet && !userSet && !portSet {
 		return fmt.Errorf("at least one of --host, --user, or --port is required")
 	}
-
-	if host != "" {
-		srv.Host = host
+	if hostSet {
+		if strings.TrimSpace(host) == "" {
+			return fmt.Errorf("host must not be empty")
+		}
+		srv.Host = strings.TrimSpace(host)
 	}
-	if user != "" {
-		srv.User = user
+	if userSet {
+		if strings.TrimSpace(user) == "" {
+			return fmt.Errorf("user must not be empty")
+		}
+		srv.User = strings.TrimSpace(user)
 	}
 	if portSet {
+		if err := validateServerPort(port); err != nil {
+			return err
+		}
 		srv.Port = port
 	}
 
@@ -172,6 +193,23 @@ func updateServer(name, host, user string, port int, portSet bool) error {
 	}
 
 	fmt.Printf("✅ Server %q updated\n", name)
+	return nil
+}
+
+func validateServerConnection(host, user string, port int) error {
+	if strings.TrimSpace(host) == "" {
+		return fmt.Errorf("host must not be empty")
+	}
+	if strings.TrimSpace(user) == "" {
+		return fmt.Errorf("user must not be empty")
+	}
+	return validateServerPort(port)
+}
+
+func validateServerPort(port int) error {
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port must be between 1 and 65535")
+	}
 	return nil
 }
 
@@ -207,6 +245,12 @@ func sshServer(name string) error {
 	port := srv.Port
 	if port == 0 {
 		port = 22
+	}
+	if strings.TrimSpace(srv.Host) == "" {
+		return fmt.Errorf("server %q has empty host", name)
+	}
+	if strings.TrimSpace(srv.User) == "" {
+		return fmt.Errorf("server %q has empty user", name)
 	}
 
 	sshCmd := exec.Command("ssh", "-p", fmt.Sprintf("%d", port), fmt.Sprintf("%s@%s", srv.User, srv.Host))

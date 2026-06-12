@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/shenyb/solo-workspace/cli/go/internal"
 	"github.com/spf13/cobra"
@@ -201,6 +202,10 @@ func pathProject(id int) error {
 		return err
 	}
 
-	fmt.Println(p.Path)
+	abs, err := filepath.Abs(p.Path)
+	if err != nil {
+		return fmt.Errorf("resolve project path: %w", err)
+	}
+	fmt.Println(abs)
 	return nil
 }

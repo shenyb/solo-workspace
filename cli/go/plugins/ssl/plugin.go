@@ -2,6 +2,7 @@ package ssl
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"time"
@@ -82,17 +83,48 @@ func checkCertificates(cfg *core.Config) error {
 		for _, r := range soonResults {
 			fmt.Printf("  %s — %d days left\n", r.Domain, r.DaysLeft)
 		}
-		if cfg.Notify != nil && cfg.Notify.Email != nil && cfg.Notify.Email.Enabled {
-			subject := "[sw] SSL Certificate Expiry Warning"
-			body := "The following certificates are expiring soon:\n\n"
-			for _, r := range soonResults {
-				body += fmt.Sprintf("- %s: %d days left\n", r.Domain, r.DaysLeft)
+
+		if cfg.Notify == nil || (cfg.Notify.Webhook == "" && (cfg.Notify.Email == nil || !cfg.Notify.Email.Enabled)) {
+			return nil
+		}
+
+		var domainNames []string
+		for _, r := range soonResults {
+			domainNames = append(domainNames, r.Domain)
+		}
+		pending, err := core.FilterSSLNotifyDomains(domainNames)
+		if err != nil {
+			fmt.Printf("Warning: ssl notify state: %v\n", err)
+			pending = domainNames
+		}
+		if len(pending) == 0 {
+			fmt.Println("(notification already sent today for these domains)")
+			return nil
+		}
+
+		pendingSet := make(map[string]CertInfo, len(pending))
+		for _, r := range soonResults {
+			for _, d := range pending {
+				if r.Domain == d {
+					pendingSet[d] = r
+				}
 			}
-			if err := core.SendEmail(subject, body); err != nil {
-				fmt.Printf("Warning: failed to send email notification: %v\n", err)
-			} else {
-				fmt.Println("✅ Notification email sent")
+		}
+
+		subject := "[sw] SSL Certificate Expiry Warning"
+		body := "The following certificates are expiring soon:\n\n"
+		for _, d := range pending {
+			r := pendingSet[d]
+			body += fmt.Sprintf("- %s: %d days left\n", r.Domain, r.DaysLeft)
+		}
+
+		if err := core.NotifyAlert(subject, body); err != nil {
+			fmt.Printf("Warning: failed to send notification: %v\n", err)
+		} else {
+			if err := core.MarkSSLNotifiedBatch(pending); err != nil {
+				fmt.Printf("Warning: failed to record ssl notification state: %v\n", err)
 			}
+			fmt.Println("✅ Notification sent")
 		}
 	}
 
@@ -109,7 +141,14 @@ func checkDomain(domain string) CertInfo {
 	}
 	defer conn.Close()
 
-	cert := conn.ConnectionState().PeerCertificates[0]
+	return certInfoFromPeerCerts(domain, conn.ConnectionState().PeerCertificates)
+}
+
+func certInfoFromPeerCerts(domain string, certs []*x509.Certificate) CertInfo {
+	if len(certs) == 0 {
+		return CertInfo{Domain: domain, Err: "no peer certificate presented"}
+	}
+	cert := certs[0]
 	daysLeft := int(time.Until(cert.NotAfter).Hours() / 24)
 
 	return CertInfo{

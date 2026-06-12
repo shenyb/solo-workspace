@@ -20,6 +20,7 @@ const (
 type ArchivedTodo struct {
 	ID          int       `yaml:"id,omitempty"`
 	Description string    `yaml:"description,omitempty"`
+	Note        string    `yaml:"note,omitempty"`
 	Done        bool      `yaml:"done,omitempty"`
 	CreatedAt   time.Time `yaml:"created_at,omitempty"`
 	UpdatedAt   time.Time `yaml:"updated_at,omitempty"`
@@ -52,7 +53,12 @@ func TodoLastActivity(t *TodoConfig) time.Time {
 }
 
 // IsTodoStale reports whether a todo's last activity exceeds maxAge.
+// Todos without timestamps are never treated as stale (legacy configs stay active).
+// Nil entries (YAML null) are always eligible for archival cleanup.
 func IsTodoStale(t *TodoConfig, maxAge time.Duration) bool {
+	if t == nil {
+		return true
+	}
 	last := TodoLastActivity(t)
 	if last.IsZero() {
 		return false
@@ -103,7 +109,7 @@ func SaveTodoArchive(archive *TodoArchive) error {
 	if err != nil {
 		return fmt.Errorf("marshal todo archive: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := WriteFileAtomic(path, data, 0600); err != nil {
 		return fmt.Errorf("write todo archive %s: %w", path, err)
 	}
 	return nil
@@ -135,20 +141,39 @@ func ArchiveStaleTodos(cfg *Config) ([]string, error) {
 	archived := make([]string, 0, len(stale))
 	for _, name := range stale {
 		todo := cfg.Todos[name]
+		if existing, ok := archive.Todos[name]; ok && existing != nil {
+			// Archive file already has this todo; drop the stale active copy.
+			archived = append(archived, name)
+			continue
+		}
+		if todo == nil {
+			// YAML null/empty value — preserve the name in archive before removing.
+			archive.Todos[name] = &ArchivedTodo{ArchivedAt: now}
+			archived = append(archived, name)
+			continue
+		}
 		archive.Todos[name] = &ArchivedTodo{
 			ID:          todo.ID,
 			Description: todo.Description,
+			Note:        todo.Note,
 			Done:        todo.Done,
 			CreatedAt:   todo.CreatedAt,
 			UpdatedAt:   todo.UpdatedAt,
 			ArchivedAt:  now,
 		}
-		delete(cfg.Todos, name)
 		archived = append(archived, name)
+	}
+
+	if len(archived) == 0 {
+		return nil, nil
 	}
 
 	if err := SaveTodoArchive(archive); err != nil {
 		return nil, err
+	}
+
+	for _, name := range archived {
+		delete(cfg.Todos, name)
 	}
 	return archived, nil
 }
@@ -167,6 +192,9 @@ func SortedArchivedTodos(archive *TodoArchive) []ArchivedTodoEntry {
 
 	entries := make([]ArchivedTodoEntry, 0, len(archive.Todos))
 	for name, t := range archive.Todos {
+		if t == nil {
+			continue
+		}
 		entries = append(entries, ArchivedTodoEntry{Name: name, Config: t})
 	}
 	sort.Slice(entries, func(i, j int) bool {

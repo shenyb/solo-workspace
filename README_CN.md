@@ -120,11 +120,11 @@ SW 按以下优先级加载配置（先找到的生效）：
 | 优先级 | 路径 | 用途 |
 |--------|------|------|
 | 1 | `-c <path>` / `--config <path>` | 手动指定 |
-| 2 | `~/.solo/config.yaml` | 全局配置（跨项目） |
-| 3 | `.solo.yaml`（当前目录） | 项目级配置 |
+| 2 | `.solo.yaml`（当前目录） | 项目级配置 |
+| 3 | `~/.solo/config.yaml` | 全局配置（跨项目） |
 | 4 | _（无）_ | 空默认值 |
 
-数据文件（`env.yaml`、`secrets.enc`）与当前使用的配置文件同级目录存放——默认 `~/.solo/config.yaml` 时在 `~/.solo/`；使用 `-c /path/to/config.yaml` 时跟随到 `/path/to/`。
+数据文件（`env.local`、`secrets.enc`）与当前使用的配置文件同级目录存放——默认 `~/.solo/config.yaml` 时在 `~/.solo/`；使用 `-c /path/to/config.yaml` 时跟随到 `/path/to/`。
 
 **最小 `~/.solo/config.yaml` 示例：**
 
@@ -144,7 +144,8 @@ notify:
     host: smtp.example.com
     port: 587
     username: user@example.com
-    password: app-password
+    password_secret: smtp_password   # 推荐：sw secret set smtp_password "..."
+    # password: app-password         # 或明文（不推荐）
     from: user@example.com
     to:
       - admin@example.com

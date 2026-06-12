@@ -3,10 +3,8 @@ module github.com/shenyb/solo-workspace/cli/go
 go 1.26.4
 
 require (
-	github.com/briandowns/spinner v1.23.2
 	github.com/fatih/color v1.19.0
 	github.com/mattn/go-runewidth v0.0.9
-	github.com/olekukonko/tablewriter v0.0.5
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.52.0
 	golang.org/x/term v0.43.0

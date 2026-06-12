@@ -367,6 +367,9 @@ func showStats() error {
 	done := 0
 	withNote := 0
 	for _, t := range cfg.Todos {
+		if t == nil {
+			continue
+		}
 		if t.Done {
 			done++
 		}
