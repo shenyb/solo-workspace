@@ -14,6 +14,9 @@ func Cmd() *cobra.Command {
 		Use:   "domain",
 		Short: "Domain management",
 		Long:  `List, add, and delete configured domains.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return listDomains()
+		},
 	}
 
 	cmd.AddCommand(&cobra.Command{

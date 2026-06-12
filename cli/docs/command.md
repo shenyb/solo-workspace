@@ -14,16 +14,21 @@ Overview display order: **Projects → Todos → Servers → Domains → Notific
 
 Projects and todos include an auto-increment **ID** column. Use IDs for update/delete/done/reopen operations.
 
+Commands default to `list` when no subcommand is given — `sw project`, `sw todo`, `sw server`, `sw domain`, `sw secret`, and `sw env` all show their list view.
+
 ## Resource Management
 
 ```bash
 # Project CRUD (update/delete by ID)
+sw project                          # List all projects (same as sw project list)
 sw project list
 sw project add <name> --path <path> --desc "..."
 sw project update <id> --path <path> --desc "..."
 sw project delete <id>
+sw project path <id>                # Print project absolute path (use: cd "$(sw project path 1)")
 
 # Server management
+sw server                           # List all servers (same as sw server list)
 sw server list
 sw server add <name> --host <ip> --user <user>  # Add a server
 sw server update <name> --host <ip>              # Update server fields
@@ -31,6 +36,7 @@ sw server delete <name>                          # Delete a server
 sw server ssh <name>
 
 # Domain management
+sw domain                           # List all domains (same as sw domain list)
 sw domain list
 sw domain add <domain>
 sw domain delete <domain>
@@ -45,13 +51,16 @@ sw ssl check                 # Check all domain SSL certificates
 ## Todo
 
 ```bash
-sw todo list                      # List all todos (with ID, Created, Updated)
+sw todo                           # List all todos (same as sw todo list)
+sw todo list                      # List all todos (with ID, Created, Updated, Note)
 sw todo add <name> --desc "..."   # Add a todo item
 sw todo update <id> --name <name>   # Rename a todo (optional)
 sw todo update <id> --desc "..."  # Update description (at least one flag required)
+sw todo note <id> <text>          # Add a note to a todo item
 sw todo delete <id>               # Delete a todo by ID
 sw todo done <id>                 # Mark a todo as done
 sw todo reopen <id>               # Reopen a completed todo
+sw todo stats                     # Show summary: total, pending, completed, with note, archived
 sw todo archive run               # Archive todos inactive for 2+ weeks
 sw todo archive list              # List archived todos
 ```
@@ -102,6 +111,16 @@ sw secret list                    # List all secret keys
 sw secret delete api_key          # Delete a secret
 ```
 
+## Time Log
+
+```bash
+sw log "fixed login bug"          # Record a timestamped log entry
+sw log today                      # Show today's entries
+sw log list                       # Show last 20 entries
+sw log since 3d                   # Show entries from last 3 days
+sw log since 24h                  # Show entries from last 24 hours
+```
+
 ## Shell Completion
 
 ```bash
@@ -142,16 +161,21 @@ sw all                       # 查看所有配置的资源
 
 项目和待办带有自增 **ID** 列，更新/删除/完成/重开等操作请使用 ID。
 
+命令默认等于 list：`sw project`、`sw todo`、`sw server`、`sw domain`、`sw secret`、`sw env` 都不需要加 `list`，直接展示列表。
+
 ## 资源管理
 
 ```bash
 # 项目管理（update/delete 按 ID 操作）
+sw project                          # 查看所有项目（等同 sw project list）
 sw project list
 sw project add <name> --path <path> --desc "..."
 sw project update <id> --path <path> --desc "..."
 sw project delete <id>
+sw project path <id>                # 输出项目绝对路径（配合 cd 使用：cd "$(sw project path 1)"）
 
 # 服务器管理
+sw server                           # 查看所有服务器（等同 sw server list）
 sw server list
 sw server add <name> --host <ip> --user <user>  # 添加服务器
 sw server update <name> --host <ip>              # 更新服务器信息
@@ -159,6 +183,7 @@ sw server delete <name>                          # 删除服务器
 sw server ssh <name>
 
 # 域名管理
+sw domain                           # 查看所有域名（等同 sw domain list）
 sw domain list
 sw domain add <domain>
 sw domain delete <domain>
@@ -173,13 +198,16 @@ sw ssl check                 # 检查所有域名的 SSL 证书
 ## 待办事项
 
 ```bash
-sw todo list                      # 查看所有待办（含 ID、创建/更新时间）
+sw todo                           # 查看所有待办（等同 sw todo list）
+sw todo list                      # 查看所有待办（含 ID、创建/更新时间、备注标记）
 sw todo add <name> --desc "..."   # 添加待办
 sw todo update <id> --name <name>   # 重命名（可选）
 sw todo update <id> --desc "..."  # 修改描述（至少指定一个参数）
+sw todo note <id> <text>          # 给待办添加备注
 sw todo delete <id>               # 按 ID 删除
 sw todo done <id>                 # 标记完成
 sw todo reopen <id>               # 重新打开
+sw todo stats                     # 查看统计：总数/待完成/已完成/有备注/已归档
 sw todo archive run               # 归档超过 2 周未更新的待办
 sw todo archive list              # 查看已归档待办
 ```
@@ -227,6 +255,16 @@ sw secret set api_key "sk-xxx"    # 存储加密机密
 sw secret get api_key             # 读取并解密
 sw secret list                    # 查看所有机密键名
 sw secret delete api_key          # 删除机密
+```
+
+## 时间日志
+
+```bash
+sw log "修复了登录 bug"            # 记录一条时间日志
+sw log today                      # 查看今天的日志
+sw log list                       # 查看最近 20 条
+sw log since 3d                   # 查看最近 3 天
+sw log since 24h                  # 查看最近 24 小时
 ```
 
 ## Shell 补全

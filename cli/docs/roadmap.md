@@ -21,7 +21,12 @@
 - [x] Config priority adjustment — `~/.solo/config.yaml` takes precedence over `./.solo.yaml`
 - [x] Project CRUD (`project add/update/delete`)
 - [x] Project & todo auto-increment IDs — CRUD by ID for easier management
+- [x] Project path — `project path <id>` prints absolute path for `cd`
 - [x] Todo update — `todo update <id>` with `--name` / `--desc`
+- [x] Todo notes — `todo note <id> <text>` for per-item notes
+- [x] Todo stats — `todo stats` summary (total, pending, done, with note, archived)
+- [x] Time log — `log` plugin for quick timestamped daily entries
+- [x] Default list behavior — all resource commands default to `list` without subcommand
 - [x] Overview improvements — projects first, then todos; secrets shown in `sw all`
 - [x] Table & TUI formatting — aligned column separators, stable terminal restore
 - [x] PowerShell / Git Bash completion installation
@@ -87,7 +92,12 @@
 - [x] 配置优先级调整 — `~/.solo/config.yaml` 优先于 `./.solo.yaml`
 - [x] 项目增删改查（`project add/update/delete`）
 - [x] 项目 & 待办自增 ID — 按 ID 操作，管理更方便
+- [x] 项目路径跳转 — `project path <id>` 输出绝对路径，配合 `cd` 使用
 - [x] 待办编辑 — `todo update <id>` 支持 `--name` / `--desc`
+- [x] 待办备注 — `todo note <id> <text>` 给待办添加备注
+- [x] 待办统计 — `todo stats` 展示总数/待完成/已完成/有备注/已归档
+- [x] 时间日志 — `log` 插件，带时间戳的快捷日志
+- [x] 默认列表 — 所有资源命令无子命令时默认展示列表
 - [x] 概览优化 — 项目优先、待办其次；`sw all` 展示机密名称
 - [x] 表格 & TUI 格式 — 列分隔符对齐、终端状态稳定恢复
 - [x] PowerShell / Git Bash 补全安装

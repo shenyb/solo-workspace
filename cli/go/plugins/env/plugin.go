@@ -74,6 +74,23 @@ Examples:
   sw env unset-secret DB_PASSWORD          # Remove from secret vault
 `,
 		PersistentPreRunE: initEnv,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(db.vars) == 0 {
+				fmt.Println("No environment variables saved")
+			} else {
+				fmt.Println("Saved Environment Variables:")
+				for name := range db.vars {
+					fmt.Printf("  • %s\n", name)
+				}
+			}
+			secretList, err := secret.ListSecrets()
+			if err == nil {
+				for _, name := range secretList {
+					fmt.Printf("  • %s (secret)\n", name)
+				}
+			}
+			return nil
+		},
 	}
 
 	cmd.AddCommand(setCmd())

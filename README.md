@@ -28,9 +28,10 @@ As an indie developer, you juggle dozens of tools: a terminal for servers, a spr
 | 🖥️ Servers | List, add, update, delete, SSH into configured servers |
 | 🌐 Domains | Track domains, check SSL certificates |
 | 📁 Projects | CRUD with auto-increment IDs |
-| ✅ Todos | Task management with edit, done/reopen (by ID); manual archive after 2 weeks of inactivity |
+| ✅ Todos | Task management with edit, done/reopen (by ID); notes, statistics, manual archive after 2 weeks of inactivity |
 | 🔐 Secrets | AES-256-GCM encrypted storage for API keys & tokens |
 | 🌍 Env Vars | Centralized `.env` management with encryption support |
+| 📝 Log | Quick timestamped daily log — `sw log \"fixed login bug\"` |
 | 📧 Notify | SMTP email alerts (domain expiry, custom messages) |
 | ⚙️ Config | YAML/JSON import/export, set/get/delete by path |
 | 📋 Overview | `sw` with no args shows all resources at a glance |
@@ -67,9 +68,19 @@ sw
 # Manage todos by ID
 sw todo add fix-bug --desc "Fix login issue"
 sw todo update 1 --desc "Fix OAuth login"
+sw todo note 1 "Root cause: cache not invalidated"  # Add a note
 sw todo done 1
+sw todo stats                       # View summary statistics
 sw todo archive run              # Archive todos inactive for 2+ weeks
 sw todo archive list             # View archived todos (todos-archive.yaml)
+
+# Quick daily log
+sw log "Fixed login OAuth bug"     # Timestamped entry
+sw log today                        # Show today's entries
+sw log since 3d                     # Show last 3 days
+
+# Jump to a project directory (add to shell: swj() { cd "$(sw project path "$1")"; })
+cd "$(sw project path 1)"
 
 # Optional interactive menu
 sw tui
@@ -162,9 +173,10 @@ cli/go/
 │   ├── ssl/            # SSL certificate management
 │   ├── server/         # Server management
 │   ├── domain/         # Domain management
-│   ├── project/        # Project CRUD
-│   ├── todo/           # Todo management
+│   ├── project/        # Project CRUD (including `path` for cd)
+│   ├── todo/           # Todo management (notes, stats, archive)
 │   ├── notify/         # Email notifications
+│   ├── log/            # Quick daily time log
 │   ├── config/         # Config import/export/set/get
 │   ├── env/            # Environment variables
 │   └── secret/         # AES-256-GCM encrypted secrets
@@ -183,8 +195,8 @@ cli/go/
 | Version | Status | Highlights |
 |---------|--------|------------|
 | v0.1 | ✅ Done | Plugin architecture, SSL check, server SSH, domains, todos, notifications |
-| v0.2 | ✅ Current | Env vars, secrets, config import/export, ID-based project/todo CRUD, overview & TUI polish |
-| v0.3 | 🔨 Planned | Project relationships, cost tracking, SQLite backend |
+| v0.2 | ✅ Current | Env vars, secrets, config import/export, ID-based project/todo CRUD, todo notes & stats, project path, time log, overview & TUI polish |
+| v0.3 | 🔨 Planned | Todo stats enhancements, project relationships, cost tracking, SQLite backend |
 | v0.4 | 📋 Planned | Docker integration, GitHub integration |
 | v1.0 | 🚀 Future | Web dashboard, plugin marketplace |
 

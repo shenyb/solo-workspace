@@ -13,6 +13,7 @@ func Cmd() *cobra.Command {
 		Use:   "project",
 		Short: "Project management",
 		Long:  `List, add, update, and delete your local projects.`,
+		RunE: func(cmd *cobra.Command, args []string) error { return listProjects() },
 	}
 
 	cmd.AddCommand(&cobra.Command{
@@ -68,6 +69,20 @@ func Cmd() *cobra.Command {
 	updateCmd.Flags().String("path", "", "New project path")
 	updateCmd.Flags().String("desc", "", "New project description")
 	cmd.AddCommand(updateCmd)
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "path <id>",
+		Short: "Print the absolute path of a project by ID (use with cd)",
+		Long:  `Print the absolute path of a project. Usage: cd "$(sw project path <id>)"`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
+			return pathProject(id)
+		},
+	})
 
 	return cmd
 }
@@ -172,5 +187,20 @@ func updateProject(id int, path, desc string) error {
 	}
 
 	fmt.Printf("✅ Project %q (id=%d) updated\n", name, id)
+	return nil
+}
+
+func pathProject(id int) error {
+	cfg := core.CurrentConfig
+	if cfg == nil || cfg.Projects == nil {
+		return fmt.Errorf("project id %d not found", id)
+	}
+
+	_, p, err := core.ProjectByID(cfg, id)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(p.Path)
 	return nil
 }

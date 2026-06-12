@@ -28,9 +28,10 @@
 | 🖥️ 服务器 | 列表查看、增删改、SSH 连接 |
 | 🌐 域名 | 域名追踪、SSL 证书检查 |
 | 📁 项目 | 本地项目增删改查，自增 ID |
-| ✅ 待办 | 任务管理，支持编辑、完成/重开（按 ID）；超过 2 周未更新可手动归档 |
+| ✅ 待办 | 任务管理，支持编辑、完成/重开（按 ID）、备注、统计；超过 2 周未更新可手动归档 |
 | 🔐 机密 | AES-256-GCM 加密存储 API key 和 token |
 | 🌍 环境变量 | 集中式 `.env` 管理，支持加密 |
+| 📝 日志 | 快捷时间日志 — `sw log "修复了XXbug"`
 | 📧 通知 | SMTP 邮件告警（域名到期、自定义消息） |
 | ⚙️ 配置 | YAML/JSON 导入导出，按路径增删改查 |
 | 📋 概览 | `sw` 无参数展示全部资源 |
@@ -61,9 +62,19 @@ sw
 # 按 ID 管理待办
 sw todo add fix-bug --desc "修复登录问题"
 sw todo update 1 --desc "修复 OAuth 登录"
+sw todo note 1 "根因：缓存未失效"  # 加备注
 sw todo done 1
+sw todo stats                       # 查看统计
 sw todo archive run              # 归档超过 2 周未更新的待办
 sw todo archive list             # 查看已归档待办（todos-archive.yaml）
+
+# 快捷时间日志
+sw log "修复了登录 OAuth bug"      # 记一笔
+sw log today                        # 看今天的日志
+sw log since 3d                     # 看最近 3 天
+
+# 跳到项目目录（配合 shell 函数：swj() { cd "$(sw project path "$1")"; }）
+cd "$(sw project path 1)"
 
 # 可选交互菜单
 sw tui
@@ -155,9 +166,10 @@ cli/go/
 │   ├── ssl/            # SSL 证书管理
 │   ├── server/         # 服务器管理
 │   ├── domain/         # 域名管理
-│   ├── project/        # 项目增删改查
-│   ├── todo/           # 待办管理
+│   ├── project/        # 项目增删改查（含 path 跳转）
+│   ├── todo/           # 待办管理（备注、统计、归档）
 │   ├── notify/         # 邮件通知
+│   ├── log/            # 快捷时间日志
 │   ├── config/         # 配置导入导出/设值取值
 │   ├── env/            # 环境变量管理
 │   └── secret/         # AES-256-GCM 加密机密
@@ -176,8 +188,8 @@ cli/go/
 | 版本 | 状态 | 亮点 |
 |------|------|------|
 | v0.1 | ✅ 已完成 | 插件架构、SSL 检查、服务器 SSH、域名、待办、通知 |
-| v0.2 | ✅ 当前 | 环境变量、机密加密、配置导入导出、ID 化项目/待办、概览与 TUI 优化 |
-| v0.3 | 🔨 计划中 | 项目关联、成本追踪、SQLite 后端 |
+| v0.2 | ✅ 当前 | 环境变量、机密加密、配置导入导出、ID 化项目/待办、待办备注与统计、项目路径跳转、时间日志、概览与 TUI 优化 |
+| v0.3 | 🔨 计划中 | 待办统计增强、项目关联、成本追踪、SQLite 后端 |
 | v0.4 | 📋 计划中 | Docker 集成、GitHub 集成 |
 | v1.0 | 🚀 远期 | Web 仪表盘、插件市场 |
 

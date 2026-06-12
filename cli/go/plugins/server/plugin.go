@@ -16,6 +16,9 @@ func Cmd() *cobra.Command {
 		Use:   "server",
 		Short: "Server management",
 		Long:  `List, add, update, delete, and SSH into your servers.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return listServers()
+		},
 	}
 
 	cmd.AddCommand(&cobra.Command{

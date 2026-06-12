@@ -101,6 +101,7 @@ type NotifyConfig struct {
 type TodoConfig struct {
 	ID          int       `yaml:"id,omitempty"`
 	Description string    `yaml:"description,omitempty"`
+	Note        string    `yaml:"note,omitempty"`
 	Done        bool      `yaml:"done,omitempty"`
 	CreatedAt   time.Time `yaml:"created_at,omitempty"`
 	UpdatedAt   time.Time `yaml:"updated_at,omitempty"`

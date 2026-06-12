@@ -30,6 +30,18 @@ Examples:
   sw secret list
 `,
 		PersistentPreRunE: initSecretVault,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			keys := globalVault.List()
+			if len(keys) == 0 {
+				fmt.Println(core.Warn("No secrets saved"))
+				return nil
+			}
+			fmt.Println(core.Info("Saved Secrets:"))
+			for _, key := range keys {
+				fmt.Printf("  • %s\n", key)
+			}
+			return nil
+		},
 	}
 
 	cmd.AddCommand(setCmd())

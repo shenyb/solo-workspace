@@ -18,4 +18,9 @@ cli/go/go.work.sum
 *~
 
 
-reviewbot/.venv/  
+reviewbot/.venv/
+
+# Column plan (personal)
+cli/docs/掘金专栏规划.md
+/reviewbot/
+/cli/docs/zhuanlan/

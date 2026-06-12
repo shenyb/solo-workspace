@@ -13,6 +13,7 @@ import (
 	"github.com/shenyb/solo-workspace/cli/go/plugins/config"
 	"github.com/shenyb/solo-workspace/cli/go/plugins/domain"
 	"github.com/shenyb/solo-workspace/cli/go/plugins/env"
+	"github.com/shenyb/solo-workspace/cli/go/plugins/log"
 	"github.com/shenyb/solo-workspace/cli/go/plugins/notify"
 	"github.com/shenyb/solo-workspace/cli/go/plugins/project"
 	"github.com/shenyb/solo-workspace/cli/go/plugins/secret"
@@ -68,6 +69,7 @@ func init() {
 	rootCmd.AddCommand(secret.Cmd())
 	rootCmd.AddCommand(config.Cmd())
 	rootCmd.AddCommand(env.Cmd())
+	rootCmd.AddCommand(log.Cmd())
 	rootCmd.AddCommand(allCmd())
 	rootCmd.AddCommand(tuiCmd())
 	rootCmd.AddCommand(completionCmd())

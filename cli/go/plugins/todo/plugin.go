@@ -13,6 +13,9 @@ func Cmd() *cobra.Command {
 		Use:   "todo",
 		Short: "Todo management",
 		Long:  `Manage todo items for your projects and tasks.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return listTodos()
+		},
 	}
 
 	cmd.AddCommand(&cobra.Command{
@@ -115,6 +118,27 @@ func Cmd() *cobra.Command {
 	})
 	cmd.AddCommand(archiveCmd)
 
+	cmd.AddCommand(&cobra.Command{
+		Use:   "note <id> <text>",
+		Short: "Add a note to a todo item",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
+			return noteTodo(id, args[1])
+		},
+	})
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "stats",
+		Short: "Show todo statistics",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return showStats()
+		},
+	})
+
 	return cmd
 }
 
@@ -128,13 +152,18 @@ func listTodos() error {
 		return nil
 	}
 
-	columns := []string{"ID", "Name", "Description", "Status", "Created", "Updated"}
+	columns := []string{"ID", "Name", "Description", "Note", "Status", "Created", "Updated"}
 	rows := make([][]string, 0, len(cfg.Todos))
 	for _, entry := range core.SortedTodos(cfg) {
+		note := ""
+		if entry.Config.Note != "" {
+			note = "📝"
+		}
 		rows = append(rows, []string{
 			fmt.Sprintf("%d", entry.Config.ID),
 			entry.Name,
 			entry.Config.Description,
+			note,
 			core.TodoStatus(entry.Config.Done),
 			core.FormatTodoTime(entry.Config.CreatedAt),
 			core.FormatTodoTime(entry.Config.UpdatedAt),
@@ -302,5 +331,62 @@ func setTodoDone(id int, done bool) error {
 	} else {
 		fmt.Printf("✅ Todo %q (id=%d) reopened\n", name, id)
 	}
+	return nil
+}
+
+func noteTodo(id int, note string) error {
+	cfg := core.CurrentConfig
+	if cfg == nil || cfg.Todos == nil {
+		return fmt.Errorf("todo id %d not found", id)
+	}
+
+	name, todo, err := core.TodoByID(cfg, id)
+	if err != nil {
+		return err
+	}
+
+	if todo.Note != "" {
+		todo.Note += "\n"
+	}
+	todo.Note += note
+	core.TouchTodoUpdated(todo)
+	if err := core.SaveConfig(); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+	fmt.Printf("✅ Note added to todo %q (id=%d)\n", name, id)
+	return nil
+}
+
+func showStats() error {
+	cfg := core.CurrentConfig
+	if cfg == nil {
+		cfg = core.DefaultConfig()
+	}
+
+	total := len(cfg.Todos)
+	done := 0
+	withNote := 0
+	for _, t := range cfg.Todos {
+		if t.Done {
+			done++
+		}
+		if t.Note != "" {
+			withNote++
+		}
+	}
+
+	// Count archived
+	archived := 0
+	archive, err := core.LoadTodoArchive()
+	if err == nil {
+		archived = len(archive.Todos)
+	}
+
+	fmt.Printf("📊 Todo Statistics\n")
+	fmt.Printf("  Total:     %d\n", total)
+	fmt.Printf("  Pending:   %d\n", total-done)
+	fmt.Printf("  Completed: %d\n", done)
+	fmt.Printf("  With note: %d\n", withNote)
+	fmt.Printf("  Archived:  %d\n", archived)
 	return nil
 }
