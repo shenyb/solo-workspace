@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+"""
+solo-spring-scaffold — Spring Boot 3.x 项目脚手架生成器
+
+用法:
+    python solo-spring-scaffold init my-app --package com.example.myapp --jdk 21
+    python solo-spring-scaffold init my-app --package com.example.myapp --jdk 21 \\
+        --db-url jdbc:mysql://192.168.1.100:3306/mydb --db-user root --db-pass xxx
+"""
+import argparse
+import os
+import re
+import shutil
+import sys
+import stat
+from pathlib import Path
+from typing import Optional
+
+# ─── 版本映射 ───
+SPRING_BOOT_VERSIONS = {
+    17: "3.2.5",
+    21: "3.3.8",
+    25: "3.4.4",
+}
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+GENERATOR_TPL_DIR = Path(__file__).parent / "generator_tpl"
+BIN_TPL_DIR = Path(__file__).parent / "bin_tpl"
+
+# 需要替换的占位符文件
+PLACEHOLDER_FILES = {
+    "{{ProjectName}}Application.java",
+}
+
+# 需要 chmod +x 的脚本文件
+EXECUTABLE_SCRIPTS = {
+    "bin/start.sh",
+    "bin/stop.sh",
+    "bin/deploy.sh",
+    "bin/gen-tables.sh",
+}
+
+
+class Color:
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    CYAN = "\033[96m"
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+
+
+def ok(msg: str):
+    print(f"{Color.GREEN}✓{Color.RESET} {msg}")
+
+
+def info(msg: str):
+    print(f"{Color.CYAN}→{Color.RESET} {msg}")
+
+
+def warn(msg: str):
+    print(f"{Color.YELLOW}⚠ {msg}{Color.RESET}")
+
+
+def to_pascal_case(name: str) -> str:
+    """将 kebab-case 或 snake_case 转 PascalCase"""
+    return "".join(word.capitalize() for word in re.split(r"[-_]", name))
+
+
+def to_package_dir(package: str) -> str:
+    """com.example.myapp → com/example/myapp"""
+    return package.replace(".", "/")
+
+
+def resolve_jdk(jdk: int) -> int:
+    if jdk not in SPRING_BOOT_VERSIONS:
+        raise ValueError(
+            f"不支持的 JDK 版本: {jdk}。支持的版本: {', '.join(map(str, SPRING_BOOT_VERSIONS.keys()))}"
+        )
+    return jdk
+
+
+def make_placeholder_map(
+    project_name: str,
+    base_package: str,
+    jdk_version: int,
+    db_url: Optional[str] = None,
+    db_user: Optional[str] = None,
+    db_pass: Optional[str] = None,
+    db_host: str = "127.0.0.1",
+    db_port: str = "3306",
+    db_name: str = "",
+    db_tables: list[str] | None = None,
+) -> dict[str, str]:
+    """构建占位符映射表"""
+
+    # 解析数据库信息
+    if db_url:
+        # jdbc:mysql://host:port/dbname
+        m = re.match(r"jdbc:mysql://([^:/]+)(?::(\d+))?/([^?]+)", db_url)
+        if m:
+            db_host = m.group(1)
+            db_port = m.group(2) or "3306"
+            db_name = m.group(3)
+
+    return {
+        "{{projectName}}": project_name,
+        "{{ProjectName}}": to_pascal_case(project_name),
+        "{{basePackage}}": base_package,
+        "{{jdkVersion}}": str(jdk_version),
+        "{{springBootVersion}}": SPRING_BOOT_VERSIONS[jdk_version],
+        "{{dbUrl}}": db_url or "",
+        "{{dbUser}}": db_user or "",
+        "{{dbPass}}": db_pass or "",
+        "{{dbHost}}": db_host,
+        "{{dbPort}}": db_port,
+        "{{dbName}}": db_name,
+        "{{dbTables}}": (",".join(db_tables) if db_tables else ""),
+    }
+
+
+def replace_in_file(filepath: Path, placeholders: dict[str, str]):
+    """替换文件中的占位符"""
+    content = filepath.read_text(encoding="utf-8")
+    for key, value in placeholders.items():
+        content = content.replace(key, value)
+    filepath.write_text(content, encoding="utf-8")
+
+
+# 需要加项目名前缀的模块目录
+MODULE_DIRS = {"common", "dao", "service", "web"}
+
+
+def copy_and_render(src: Path, dst: Path, placeholders: dict[str, str]):
+    """
+    拷贝并渲染模板文件
+    - __pkg__ 目录替换为实际包路径
+    - {{ProjectName}} 文件替换为实际项目名
+    - common/dao/service/web 目录自动加项目名前缀
+    """
+    # ── 目录处理 ──
+    if src.is_dir():
+        dst.mkdir(parents=True, exist_ok=True)
+        for child in src.iterdir():
+            # 只在模板根目录下对模块目录加项目名前缀
+            if src == TEMPLATES_DIR and child.name in MODULE_DIRS:
+                child_dst = dst / f"{placeholders['{{projectName}}']}-{child.name}"
+            else:
+                child_dst = dst / child.name
+            # __pkg__ 目录：映射到实际包路径
+            if child.name == "__pkg__":
+                pkg_dir = to_package_dir(placeholders["{{basePackage}}"])
+                child_dst = dst / pkg_dir
+                child_dst.mkdir(parents=True, exist_ok=True)
+                for inner in child.iterdir():
+                    copy_and_render(inner, child_dst / inner.name, placeholders)
+            else:
+                copy_and_render(child, child_dst, placeholders)
+        return
+
+    # ── 文件处理 ──
+    if src.name == "__init__.py" or src.suffix == ".tpl":
+        return
+
+    # dst 此时已经是完整目标路径（含文件名）
+    dst_path = dst
+
+    # 处理文件名占位符
+    filename = dst_path.name
+    for key, value in placeholders.items():
+        if key in filename:
+            filename = filename.replace(key, value)
+    dst_path = dst_path.parent / filename
+
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst_path)
+    replace_in_file(dst_path, placeholders)
+
+    # 设置可执行权限
+    if os.name != "nt":
+        rel_str = str(dst_path.relative_to(dst))
+        if rel_str.replace("\\", "/") in EXECUTABLE_SCRIPTS:
+            st = dst_path.stat()
+            dst_path.chmod(st.st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def generate_project(
+    project_path: Path,
+    project_name: str,
+    base_package: str,
+    jdk_version: int,
+    db_url: Optional[str] = None,
+    db_user: Optional[str] = None,
+    db_pass: Optional[str] = None,
+):
+    """从模板生成完整项目"""
+
+    placeholders = make_placeholder_map(
+        project_name=project_name,
+        base_package=base_package,
+        jdk_version=jdk_version,
+        db_url=db_url,
+        db_user=db_user,
+        db_pass=db_pass,
+    )
+
+    print(f"\n{Color.BOLD}🚀 生成 {project_name} ...{Color.RESET}\n")
+
+    # ── 1. 拷贝 Java 模板文件 ──
+    info("生成项目结构...")
+    copy_and_render(TEMPLATES_DIR, project_path, placeholders)
+    ok("项目结构已生成")
+
+    # ── 2. 生成 .gitignore ──
+    shutil.copy2(
+        TEMPLATES_DIR / "gitignore.tpl",
+        project_path / ".gitignore",
+    )
+    ok(".gitignore 已生成")
+
+    # ── 3. 拷贝 bin 脚本 ──
+    info("生成部署脚本...")
+    bin_dir = project_path / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+
+    for tpl_file in BIN_TPL_DIR.iterdir():
+        if tpl_file.is_file():
+            dst_file = bin_dir / tpl_file.name
+            shutil.copy2(tpl_file, dst_file)
+            replace_in_file(dst_file, placeholders)
+
+    ok("bin/ 脚本已生成 (start.sh/bat, stop.sh/bat, deploy.sh)")
+
+    # ── 4. 如果有 DB 参数，生成 Generator ──
+    if db_url:
+        info("生成 MyBatis-Plus Generator...")
+        gen_dir = project_path / f"{project_name}-dao" / "src" / "main" / "java"
+        gen_dir = gen_dir / to_package_dir(base_package) / "dao" / "generator"
+        gen_dir.mkdir(parents=True, exist_ok=True)
+
+        gen_src = GENERATOR_TPL_DIR / "Generator.java.tpl"
+        gen_dst = gen_dir / "Generator.java"
+        shutil.copy2(gen_src, gen_dst)
+        replace_in_file(gen_dst, placeholders)
+
+        # gen-tables 脚本
+        for tpl_file in GENERATOR_TPL_DIR.iterdir():
+            if tpl_file.name.startswith("gen-tables"):
+                dst_file = bin_dir / tpl_file.name
+                shutil.copy2(tpl_file, dst_file)
+                replace_in_file(dst_file, placeholders)
+
+        ok(f"Generator.java + gen-tables 脚本已生成 (配好 MySQL 后运行 bin/gen-tables.sh/bat)")
+
+    # ── 5. 写入 JDK 到文档 ──
+    info("生成 README 提示...")
+    readme_path = project_path / "README.md"
+    readme = f"""# {project_name}
+
+> Generated by **solo-spring-scaffold**
+
+## 快速开始
+
+```bash
+# 前提: JDK {jdk_version}, Maven 3.8+, IDEA
+
+# 编译全部模块 + 启动 web（H2 内存库，开箱即用）
+cd {project_name}
+mvn spring-boot:run -pl {project_name}-web -am
+```
+
+访问: http://localhost:8080/swagger-ui.html
+
+## 切换 MySQL
+
+1. 在 `{project_name}-dao` 的 pom.xml 中添加 MySQL 驱动（已添加）
+2. 修改 `application-prod.yml` 中的数据库连接信息
+3. 运行 `bin/gen-tables.sh` 从数据库表生成代码
+
+## 部署到 VPS
+
+1. 编辑 `bin/deploy.sh`，填上服务器地址
+2. 运行 `bin/deploy.sh`
+
+## 项目结构
+
+```
+{project_name}/
+├── {project_name}-common/    # 公共模块：Result、异常、工具类
+├── {project_name}-dao/       # 数据层：Entity、Mapper、MyBatis-Plus 配置
+├── {project_name}-service/   # 业务层：Service 接口 + 实现
+├── {project_name}-web/       # Web 层：Controller、启动类
+├── bin/                      # 启动/停止/部署脚本
+└── pom.xml                   # 父 POM (JDK {jdk_version})
+```
+"""
+    readme_path.write_text(readme, encoding="utf-8")
+    ok("README.md 已生成")
+
+    print(f"\n{Color.GREEN}{Color.BOLD}✅ {project_name} 已生成到 {project_path}{Color.RESET}")
+    print(f"\n{Color.CYAN}   cd {project_name}")
+    print(f"   mvn spring-boot:run -pl {project_name}-web -am{Color.RESET}")
+    print(f"   → http://localhost:8080/swagger-ui.html\n")
+
+
+def cmd_init(args):
+    """处理 init 子命令"""
+    project_name = args.name
+    project_path = Path.cwd() / project_name
+
+    if project_path.exists():
+        print(f"{Color.YELLOW}⚠ 目录 {project_path} 已存在！{Color.RESET}")
+        resp = input("是否覆盖？(y/N): ")
+        if resp.lower() != "y":
+            print("已取消")
+            return
+        shutil.rmtree(project_path)
+
+    try:
+        resolve_jdk(args.jdk)
+    except ValueError as e:
+        print(f"{Color.YELLOW}{e}{Color.RESET}")
+        sys.exit(1)
+
+    generate_project(
+        project_path=project_path,
+        project_name=project_name,
+        base_package=args.package,
+        jdk_version=args.jdk,
+        db_url=args.db_url,
+        db_user=args.db_user,
+        db_pass=args.db_pass,
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="solo-spring-scaffold — Spring Boot 3.x 项目脚手架生成器",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\n示例:
+  # 生成骨架（H2 内存库，开箱即用）
+  python solo-spring-scaffold init my-app --package com.example.myapp --jdk 21
+
+  # 生成骨架 + MySQL 代码生成器
+  python solo-spring-scaffold init my-app --package com.example.myapp --jdk 21 \\
+      --db-url jdbc:mysql://192.168.1.100:3306/mydb --db-user root --db-pass xxx
+""",
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="子命令")
+    init_parser = subparsers.add_parser("init", help="初始化新项目")
+    init_parser.add_argument("name", help="项目名称（如 my-app）")
+    init_parser.add_argument("--package", "-p", required=True, help="包名（如 com.example.myapp）")
+    init_parser.add_argument(
+        "--jdk", "-j", type=int, default=21,
+        help=f"JDK 版本: {', '.join(map(str, SPRING_BOOT_VERSIONS.keys()))}（默认 21）",
+    )
+    init_parser.add_argument("--db-url", help="MySQL 连接地址（可选）")
+    init_parser.add_argument("--db-user", help="MySQL 用户名")
+    init_parser.add_argument("--db-pass", help="MySQL 密码")
+
+    args = parser.parse_args()
+
+    if args.command == "init":
+        cmd_init(args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
