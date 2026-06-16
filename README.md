@@ -1,17 +1,228 @@
 # Solo Workspace
 
-> Projects for independent developers.
+> The open-source operating system for indie developers.
+
+Manage projects, servers, domains, SSL certificates, environment variables, secrets, and more — all from your terminal.
+
+**Open Source · Plugin Architecture · Developer First**
 
 ---
 
-## Projects
+## Why Solo Workspace?
 
-| Project | Description | Language |
-|---------|-------------|----------|
-| [cli](cli/) | CLI workspace — manage servers, domains, todos, secrets, env vars from terminal | Go |
-| [reviewbot](reviewbot/) | AI-powered code review tool | Python |
-| [solo-spring-scaffold](solo-spring-scaffold/) | Spring Boot 3.x project scaffold / generator | Python |
+As an indie developer, you juggle dozens of tools: a terminal for servers, a spreadsheet for domains, sticky notes for todos, `.env` files scattered across projects, and manual SSL checks. **Solo Workspace** brings it all into one CLI — a single source of truth for your entire indie dev operation.
+
+- **One config file** for servers, domains, projects, and todos
+- **Encrypted secrets** so API keys don't sit in plaintext
+- **Plugin architecture** — extend with `go` packages, zero framework lock-in
+- **Built for indies** — no SaaS, no cloud dependency, your data stays local
 
 ---
 
-[MIT License](LICENSE)
+## Features
+
+| Category | Capability |
+|----------|-----------|
+| 🖥️ Servers | List, add, update, delete, SSH into configured servers |
+| 🌐 Domains | Track domains, check SSL certificates |
+| 📁 Projects | CRUD with auto-increment IDs |
+| ✅ Todos | Task management with edit, done/reopen (by ID); notes, statistics, manual archive after 2 weeks of inactivity |
+| 🔐 Secrets | AES-256-GCM encrypted storage for API keys & tokens |
+| 🌍 Env Vars | Centralized `.env` management with encryption support |
+| 📝 Log | Quick timestamped daily log — `sw log "fixed login bug"` |
+| 📧 Notify | SMTP email alerts (domain expiry, custom messages) |
+| ⚙️ Config | YAML/JSON import/export, set/get/delete by path |
+| 📋 Overview | `sw` with no args shows all resources at a glance |
+| 🎮 TUI | Optional interactive menu (`sw tui`) |
+| 📦 Completion | Bash / Zsh / PowerShell tab completion |
+
+![sw all](cli/docs/img/sw-all.png)
+
+![encrypted secrets and environment variables](cli/docs/img/env-secret.png)
+
+*TUI interactive menu (`sw tui`) — optional; CLI commands are the recommended workflow:*
+
+![sw TUI interactive menu](cli/docs/img/tui.png)
+
+---
+
+## Quick Example
+
+```bash
+# Add a server, domain, and project
+sw server add my-vps --host 1.2.3.4 --user root --port 22
+sw domain add example.com
+sw project add my-saas --path ~/code/my-saas --desc "My SaaS product"
+
+# Check SSL certs for all domains
+sw ssl check
+
+# Store an API key securely
+sw secret set stripe_key "sk_live_xxx"
+
+# See everything at a glance (sw with no args works too)
+sw
+
+# Manage todos by ID
+sw todo add fix-bug --desc "Fix login issue"
+sw todo update 1 --desc "Fix OAuth login"
+sw todo note 1 "Root cause: cache not invalidated"  # Add a note
+sw todo done 1
+sw todo stats                       # View summary statistics
+sw todo archive run              # Archive todos inactive for 2+ weeks
+sw todo archive list             # View archived todos (todos-archive.yaml)
+
+# Quick daily log
+sw log "Fixed login OAuth bug"     # Timestamped entry
+sw log today                        # Show today's entries
+sw log since 3d                     # Show last 3 days
+
+# Jump to a project directory (add to shell: swj() { cd "$(sw project path "$1")"; })
+cd "$(sw project path 1)"
+
+# Optional interactive menu
+sw tui
+```
+
+---
+
+## Installation
+
+### macOS / Linux
+```bash
+cd cli/go && go build -o ~/bin/sw . && cd -
+```
+
+### Windows (Git Bash)
+```bash
+cd cli/go && go build -o ~/bin/sw.exe . && cd -
+```
+
+### Windows (PowerShell)
+```powershell
+cd cli\go
+go build -o "$env:USERPROFILE\bin\sw.exe" .
+```
+
+> **Quick verify:** `sw ssl check`
+
+Add `~/bin` to your `PATH` if it isn't already.
+
+### Shell Completion
+
+```bash
+sw completion install bash   # or zsh, fish, powershell
+```
+
+![shell tab completion](cli/docs/img/completion.png)
+
+---
+
+## Configuration
+
+SW loads config in this order (first found wins):
+
+| Priority | Path | Use Case |
+|----------|------|----------|
+| 1 | `-c <path>` / `--config <path>` | Manual override |
+| 2 | `.solo.yaml` (cwd) | Per-project config |
+| 3 | `~/.solo/config.yaml` | Global settings (all projects) |
+| 4 | _(none)_ | Empty defaults |
+
+Data files (`env.local`, `secrets.enc`) live alongside the active config file — when using the default `~/.solo/config.yaml` they stay in `~/.solo/`; when using `-c /path/to/config.yaml` they follow to `/path/to/`.
+
+**Minimal `~/.solo/config.yaml`:**
+
+```yaml
+servers:
+  my-vps:
+    host: 123.123.123.123
+    user: root
+    port: 22
+
+domains:
+  - example.com
+
+notify:
+  email:
+    enabled: true
+    host: smtp.example.com
+    port: 587
+    username: user@example.com
+    password_secret: smtp_password   # preferred: vault key via sw secret set
+    # password: app-password         # or plaintext (not recommended)
+    from: user@example.com
+    to:
+      - admin@example.com
+```
+
+> 📖 Full command reference: [cli/docs/command.md](cli/docs/command.md)
+
+---
+
+## Plugin Architecture
+
+Each feature is a self-contained plugin — a Lego brick you can swap or extend:
+
+```
+cli/go/
+├── cmd/                # CLI entry point (cobra + TUI)
+├── internal/           # Config, output, plugin interface
+├── plugins/
+│   ├── ssl/            # SSL certificate management
+│   ├── server/         # Server management
+│   ├── domain/         # Domain management
+│   ├── project/        # Project CRUD (including `path` for cd)
+│   ├── todo/           # Todo management (notes, stats, archive)
+│   ├── notify/         # Email notifications
+│   ├── log/            # Quick daily time log
+│   ├── config/         # Config import/export/set/get
+│   ├── env/            # Environment variables
+│   └── secret/         # AES-256-GCM encrypted secrets
+└── main.go
+```
+
+**Add a plugin in 3 steps:**
+1. Create `cli/go/plugins/<name>/plugin.go`
+2. Implement the cobra command
+3. Register in `cli/go/cmd/root.go`
+
+---
+
+## Related Projects
+
+| Project | Description |
+|---------|-------------|
+| [solo-spring-scaffold](https://github.com/shenyb/solo-spring-scaffold) | Spring Boot 3.x project scaffold / generator |
+| [reviewbot](https://github.com/shenyb/reviewbot) | AI-powered code review bot (DeepSeek) |
+
+---
+
+## Roadmap
+
+| Version | Status | Highlights |
+|---------|--------|------------|
+| v0.1 | ✅ Done | Plugin architecture, SSL check, server SSH, domains, todos, notifications |
+| v0.2 | ✅ Current | Env vars, secrets, config import/export, ID-based project/todo CRUD, todo notes & stats, project path, time log, overview & TUI polish |
+| v0.3 | 🔨 Planned | Todo stats enhancements, project relationships, cost tracking, SQLite backend |
+| v0.4 | 📋 Planned | Docker integration, GitHub integration |
+| v1.0 | 🚀 Future | Web dashboard, plugin marketplace |
+
+> 📖 Full roadmap with backlog: [cli/docs/roadmap.md](cli/docs/roadmap.md)
+
+---
+
+## Contributing
+
+Contributions welcome! The plugin architecture makes it easy to add new features.
+
+1. Fork the repo
+2. Create a plugin under `cli/go/plugins/<name>/`
+3. Register it in `cli/go/cmd/root.go`
+4. Open a PR
+
+---
+
+## License
+
+MIT © Solo Workspace
