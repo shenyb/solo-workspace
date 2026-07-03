@@ -6,6 +6,8 @@
 
 **开源 · 插件架构 · 开发者优先**
 
+![Solo Workspace Demo](cli/docs/img/use.gif)
+
 ---
 
 ## 为什么需要 Solo Workspace？
