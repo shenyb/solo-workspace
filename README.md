@@ -88,25 +88,26 @@ sw tui
 
 ## Installation
 
-### macOS / Linux
+### macOS / Linux (one-liner)
+```bash
+curl -sSL https://github.com/shenyb/solo-workspace/releases/latest/download/install.sh | sh
+```
+
+Then add `~/bin` to your `PATH` if it isn't already:
+```bash
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+```
+
+> **Quick verify:** `sw --version`
+
+### Windows
+
+Download the latest `sw-windows-amd64.exe` from [Releases](https://github.com/shenyb/solo-workspace/releases/latest), rename it to `sw.exe`, and place it somewhere in your `PATH`.
+
+### Build from source
 ```bash
 cd cli/go && go build -o ~/bin/sw . && cd -
 ```
-
-### Windows (Git Bash)
-```bash
-cd cli/go && go build -o ~/bin/sw.exe . && cd -
-```
-
-### Windows (PowerShell)
-```powershell
-cd cli\go
-go build -o "$env:USERPROFILE\bin\sw.exe" .
-```
-
-> **Quick verify:** `sw ssl check`
-
-Add `~/bin` to your `PATH` if it isn't already.
 
 ### Shell Completion
 

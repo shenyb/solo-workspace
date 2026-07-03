@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+          - goos: darwin
+            goarch: amd64
+            suffix: darwin-amd64
+          - goos: darwin
+            goarch: arm64
+            suffix: darwin-arm64
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64
+            ext: .exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go/go.mod
+
+      - name: Build
+        working-directory: cli/go
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+            -o ../../dist/sw-${{ matrix.suffix }}${{ matrix.ext }} .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sw-${{ matrix.suffix }}
+          path: dist/sw-${{ matrix.suffix }}${{ matrix.ext }}
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum sw-* > checksums.txt
+
+      - name: Create install script
+        run: |
+          cat > dist/install.sh << 'EOF'
+          #!/bin/sh
+          set -e
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64) ARCH="amd64" ;;
+            aarch64|arm64) ARCH="arm64" ;;
+            *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+          esac
+          TAG=$(curl -sf https://api.github.com/repos/shenyb/solo-workspace/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+          URL="https://github.com/shenyb/solo-workspace/releases/download/${TAG}/sw-${OS}-${ARCH}"
+          DEST="${HOME}/bin/sw"
+          mkdir -p "${HOME}/bin"
+          echo "Downloading sw ${TAG} for ${OS}-${ARCH}..."
+          curl -fSL "$URL" -o "$DEST"
+          chmod +x "$DEST"
+          echo "Installed to $DEST"
+          echo "Make sure $HOME/bin is in your PATH."
+          EOF
+          chmod +x dist/install.sh
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/sw-*
+            dist/checksums.txt
+            dist/install.sh
+          generate_release_notes: true
