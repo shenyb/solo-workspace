@@ -6,6 +6,8 @@ Manage projects, servers, domains, SSL certificates, environment variables, secr
 
 **Open Source · Plugin Architecture · Developer First**
 
+![Solo Workspace Demo](cli/docs/img/use.gif)
+
 ---
 
 ## Why Solo Workspace?
