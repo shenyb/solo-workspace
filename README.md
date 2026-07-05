@@ -1,23 +1,6 @@
 # Solo Workspace
 
-> The open-source operating system for indie developers.
-
-Manage projects, servers, domains, SSL certificates, environment variables, secrets, and more — all from your terminal.
-
-**Open Source · Plugin Architecture · Developer First**
-
-![Solo Workspace Demo](cli/docs/img/use.gif)
-
----
-
-## Why Solo Workspace?
-
-As an indie developer, you juggle dozens of tools: a terminal for servers, a spreadsheet for domains, sticky notes for todos, `.env` files scattered across projects, and manual SSL checks. **Solo Workspace** brings it all into one CLI — a single source of truth for your entire indie dev operation.
-
-- **One config file** for servers, domains, projects, and todos
-- **Encrypted secrets** so API keys don't sit in plaintext
-- **Plugin architecture** — extend with `go` packages, zero framework lock-in
-- **Built for indies** — no SaaS, no cloud dependency, your data stays local
+> Projects for independent developers.
 
 ---
 
@@ -229,3 +212,11 @@ Contributions welcome! The plugin architecture makes it easy to add new features
 ## License
 
 MIT © Solo Workspace
+
+---
+
+📬 **About Me / More Content**
+
+- 📝 Blog: [干货·工程化复盘](https://ganhuo.dev) — Production incident postmortems & engineering practices
+- 💬 Juejin: [@shenyb](https://juejin.cn/user/920709300225227/posts)
+- 🧑‍💼 Zhihu: [@shen-bin-88-64](https://www.zhihu.com/people/shen-bin-88-64/posts)
