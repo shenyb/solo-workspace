@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	core "github.com/shenyb/solo-workspace/cli/go/internal"
@@ -92,25 +93,54 @@ func initSecretVault(cmd *cobra.Command, args []string) error {
 
 // getMasterPassword returns the master password for the secret vault.
 // Priority: SOLO_SECRET_PASSWORD env var > machine-derived key.
-// The machine-derived key is unique per device so the default is never
-// the same across different machines, unlike a hardcoded fallback.
+//
+// The machine-derived key uses a stable hardware identifier (IOPlatformUUID
+// on macOS, /etc/machine-id on Linux, MachineGuid in the Windows registry)
+// rather than the hostname, which on macOS changes with network environment
+// and breaks decryption of existing vaults. The username is included so
+// different accounts on the same machine still get different keys.
 func getMasterPassword() string {
 	if pwd := os.Getenv("SOLO_SECRET_PASSWORD"); pwd != "" {
 		return pwd
 	}
-	hostname, _ := os.Hostname()
+	machineID := stableMachineID()
+	if machineID == "" {
+		machineID = "unknown"
+	}
 	username := os.Getenv("USER")
 	if username == "" {
 		username = os.Getenv("USERNAME")
-	}
-	if hostname == "" {
-		hostname = "unknown"
 	}
 	if username == "" {
 		username = "unknown"
 	}
 	fmt.Fprintf(os.Stderr, "%s No SOLO_SECRET_PASSWORD set, using machine-derived key\n", core.Warn("!"))
-	return fmt.Sprintf("sw-%s-%s", hostname, username)
+	return fmt.Sprintf("sw-%s-%s", machineID, username)
+}
+
+// stableMachineID returns a stable, hardware-backed machine identifier.
+// Falls back to "" if no identifier can be obtained (caller maps to "unknown").
+func stableMachineID() string {
+	// macOS: IOPlatformUUID (stable across reboots, network changes, hostname changes)
+	out, err := exec.Command("ioreg", "-d2", "-c", "IOPlatformExpertDevice").Output()
+	if err == nil {
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "\"IOPlatformUUID\"") {
+				parts := strings.Split(line, "\"")
+				if len(parts) >= 4 {
+					return parts[3]
+				}
+			}
+		}
+	}
+	// Linux: /etc/machine-id
+	if data, err := os.ReadFile("/etc/machine-id"); err == nil {
+		if s := strings.TrimSpace(string(data)); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // setCmd stores a secret
