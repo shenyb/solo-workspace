@@ -99,12 +99,12 @@ func Cmd() *cobra.Command {
 
 	archiveCmd := &cobra.Command{
 		Use:   "archive",
-		Short: "Archive stale todos and list archived items",
-		Long:  `Archive todos inactive for more than 2 weeks to todos-archive.yaml in the config directory.`,
+		Short: "Archive stale todos and list/restore archived items",
+		Long:  `Archive done todos inactive for more than 2 weeks to todos-archive.yaml in the config directory. Pending todos are never archived.`,
 	}
 	archiveCmd.AddCommand(&cobra.Command{
 		Use:   "run",
-		Short: "Manually archive todos older than 2 weeks",
+		Short: "Manually archive done todos older than 2 weeks",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runArchive()
 		},
@@ -114,6 +114,18 @@ func Cmd() *cobra.Command {
 		Short: "List archived todos",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return listArchivedTodos()
+		},
+	})
+	archiveCmd.AddCommand(&cobra.Command{
+		Use:   "restore <id>",
+		Short: "Restore an archived todo by ID",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := core.ParseID(args[0])
+			if err != nil {
+				return err
+			}
+			return restoreArchivedTodo(id)
 		},
 	})
 	cmd.AddCommand(archiveCmd)
@@ -307,6 +319,25 @@ func listArchivedTodos() error {
 		})
 	}
 	core.Table(columns, rows)
+	return nil
+}
+
+func restoreArchivedTodo(id int) error {
+	cfg := core.CurrentConfig
+	if cfg == nil {
+		cfg = core.DefaultConfig()
+	}
+
+	name, err := core.RestoreArchivedTodo(cfg, id)
+	if err != nil {
+		return err
+	}
+
+	core.CurrentConfig = cfg
+	if err := core.SaveConfig(); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+	fmt.Printf("✅ Todo %q (id=%d) restored from archive\n", name, id)
 	return nil
 }
 

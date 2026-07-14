@@ -61,11 +61,12 @@ sw todo delete <id>               # Delete a todo by ID
 sw todo done <id>                 # Mark a todo as done
 sw todo reopen <id>               # Reopen a completed todo
 sw todo stats                     # Show summary: total, pending, completed, with note, archived
-sw todo archive run               # Archive todos inactive for 2+ weeks
+sw todo archive run               # Archive done todos inactive for 2+ weeks (pending skipped)
 sw todo archive list              # List archived todos
+sw todo archive restore <id>      # Restore an archived todo by ID
 ```
 
-Stale todos are moved to `todos-archive.yaml` in the same directory as the active config file.
+Done todos inactive for 2+ weeks are moved to `todos-archive.yaml` in the same directory as the active config file. Pending todos are never archived.
 
 ## Notification
 
@@ -208,11 +209,12 @@ sw todo delete <id>               # 按 ID 删除
 sw todo done <id>                 # 标记完成
 sw todo reopen <id>               # 重新打开
 sw todo stats                     # 查看统计：总数/待完成/已完成/有备注/已归档
-sw todo archive run               # 归档超过 2 周未更新的待办
+sw todo archive run               # 归档超过 2 周未更新的已完成待办（pending 不归档）
 sw todo archive list              # 查看已归档待办
+sw todo archive restore <id>      # 按 ID 从归档恢复待办
 ```
 
-过期待办会移动到与当前配置文件同目录下的 `todos-archive.yaml`。
+超过 2 周未更新的已完成待办会移动到与当前配置文件同目录下的 `todos-archive.yaml`；pending 状态不会被归档。
 
 ## 通知
 

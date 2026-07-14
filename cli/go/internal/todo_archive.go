@@ -115,7 +115,8 @@ func SaveTodoArchive(archive *TodoArchive) error {
 	return nil
 }
 
-// ArchiveStaleTodos moves todos older than TodoArchiveMaxAge into the archive file.
+// ArchiveStaleTodos moves done todos older than TodoArchiveMaxAge into the archive file.
+// Pending (not done) todos are never archived, even if stale.
 // Returns the names of archived todos.
 func ArchiveStaleTodos(cfg *Config) ([]string, error) {
 	if cfg == nil || len(cfg.Todos) == 0 {
@@ -124,6 +125,10 @@ func ArchiveStaleTodos(cfg *Config) ([]string, error) {
 
 	var stale []string
 	for name, todo := range cfg.Todos {
+		// Pending todos stay active even past the max age.
+		if todo != nil && !todo.Done {
+			continue
+		}
 		if IsTodoStale(todo, TodoArchiveMaxAge) {
 			stale = append(stale, name)
 		}
@@ -182,6 +187,69 @@ func ArchiveStaleTodos(cfg *Config) ([]string, error) {
 type ArchivedTodoEntry struct {
 	Name   string
 	Config *ArchivedTodo
+}
+
+// ArchivedTodoByID finds an archived todo by its ID.
+func ArchivedTodoByID(archive *TodoArchive, id int) (string, *ArchivedTodo, error) {
+	if archive == nil || archive.Todos == nil {
+		return "", nil, fmt.Errorf("archived todo id %d not found", id)
+	}
+	for name, t := range archive.Todos {
+		if t != nil && t.ID == id {
+			return name, t, nil
+		}
+	}
+	return "", nil, fmt.Errorf("archived todo id %d not found", id)
+}
+
+// RestoreArchivedTodo moves an archived todo back into the active config by ID.
+// Updates updated_at so the item is treated as recently active.
+// Returns the restored todo name.
+func RestoreArchivedTodo(cfg *Config, id int) (string, error) {
+	if cfg == nil {
+		return "", fmt.Errorf("config is nil")
+	}
+
+	archive, err := LoadTodoArchive()
+	if err != nil {
+		return "", err
+	}
+
+	name, archived, err := ArchivedTodoByID(archive, id)
+	if err != nil {
+		return "", err
+	}
+
+	if cfg.Todos == nil {
+		cfg.Todos = make(map[string]*TodoConfig)
+	}
+	if _, exists := cfg.Todos[name]; exists {
+		return "", fmt.Errorf("todo %q already exists in active config", name)
+	}
+	if existingName, existing, findErr := TodoByID(cfg, id); findErr == nil && existing != nil {
+		return "", fmt.Errorf("todo id %d already exists as %q", id, existingName)
+	}
+
+	todo := &TodoConfig{
+		ID:          archived.ID,
+		Description: archived.Description,
+		Note:        archived.Note,
+		Done:        archived.Done,
+		CreatedAt:   archived.CreatedAt,
+		UpdatedAt:   archived.UpdatedAt,
+	}
+	if todo.ID == 0 {
+		todo.ID = NextTodoID(cfg)
+	}
+	TouchTodoUpdated(todo)
+
+	cfg.Todos[name] = todo
+	delete(archive.Todos, name)
+	if err := SaveTodoArchive(archive); err != nil {
+		delete(cfg.Todos, name)
+		return "", err
+	}
+	return name, nil
 }
 
 // SortedArchivedTodos returns archived todos sorted by archived_at descending.
