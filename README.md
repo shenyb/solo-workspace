@@ -2,6 +2,15 @@
 
 > Projects for independent developers.
 
+**Problem it solves:** as a solo / side-project developer you juggle VPS, domains, SSL, secrets, env files, and todos across notes and shell history. `sw` keeps them in one local CLI.
+
+| | |
+|--|--|
+| **What you get** | Servers, domains + SSL, projects, todos, encrypted secrets/env, daily log, overview & optional TUI |
+| **Install** | one-liner below → `sw --version` |
+| **Blog** | [ganhuo.dev](https://ganhuo.dev) |
+| **Contact / collab** | [shenyanbin1234@gmail.com](mailto:shenyanbin1234@gmail.com) |
+
 ---
 
 ## Features
@@ -220,3 +229,4 @@ MIT © Solo Workspace
 - 📝 Blog: [干货·工程化复盘](https://ganhuo.dev) — Production incident postmortems & engineering practices
 - 💬 Juejin: [@shenyb](https://juejin.cn/user/920709300225227/posts)
 - 🧑‍💼 Zhihu: [@shen-bin-88-64](https://www.zhihu.com/people/shen-bin-88-64/posts)
+- ✉️ Email: [shenyanbin1234@gmail.com](mailto:shenyanbin1234@gmail.com) — feedback, consulting, collab

@@ -2,6 +2,15 @@
 
 > 独立开发者的项目集合。
 
+**解决什么问题：** 一个人做侧车/副业时，VPS、域名、SSL、密钥、`.env`、待办散落在备忘录和 shell 历史里。`sw` 用本地 CLI 把它们收拢到一处。
+
+| | |
+|--|--|
+| **你得到什么** | 服务器、域名+SSL、项目、待办、加密 secrets/env、日志、总览与可选 TUI |
+| **安装** | 下方一行命令 → `sw --version` |
+| **博客** | [ganhuo.dev](https://ganhuo.dev) |
+| **反馈 / 合作** | [shenyanbin1234@gmail.com](mailto:shenyanbin1234@gmail.com) |
+
 ---
 
 ## 特性总览
@@ -220,3 +229,4 @@ MIT © Solo Workspace
 - 📝 博客：[干货·工程化复盘](https://ganhuo.dev) — 生产环境事故复盘与工程化实战
 - 💬 掘金：[申延彬的技术文章](https://juejin.cn/user/920709300225227/posts)
 - 🧑‍💼 知乎：[申延彬的知乎主页](https://www.zhihu.com/people/shen-bin-88-64/posts)
+- ✉️ 邮箱：[shenyanbin1234@gmail.com](mailto:shenyanbin1234@gmail.com) — 反馈、轻咨询、合作
